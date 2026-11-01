@@ -1,8 +1,14 @@
+import { Home } from './pages/Home';
+import { Library } from './pages/Library';
+import { SignIn } from './pages/SignIn';
+
 export function App() {
-  return (
-    <main>
-      <h1>Paperbrew</h1>
-      <p>Your saved articles, printed as a magazine.</p>
-    </main>
-  );
+  switch (location.pathname) {
+    case '/signin':
+      return <SignIn />;
+    case '/app':
+      return <Library />;
+    default:
+      return <Home />;
+  }
 }

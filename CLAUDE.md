@@ -50,14 +50,18 @@ All from the repo root:
 - Vercel functions for both web and API (Node runtime), Supabase Postgres. The API entry is `apps/api/api/index.ts`, serving the Hono app from `src/app.ts`.
 - Vercel has no long-lived worker: after the webhook stores a new email, jobs run inline via `waitUntil(drain(...))`, and a daily cron hits `/cron/run-jobs` to retry anything left over. `npm run worker` is local-only.
 
+## Auth and brew
+- Auth: Better Auth at `/api/auth` (Google, GitHub, Reddit; a provider is enabled only when both its `*_CLIENT_ID` and `*_CLIENT_SECRET` are set). Env: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (the web origin) and `INBOUND_ADDRESS`. OAuth callbacks are `${BETTER_AUTH_URL}/api/auth/callback/<provider>`.
+- `GET /brew` returns the signed-in user's saved articles as a PDF magazine (can take 5 to 30 s). The web app's Library page downloads it with the Brew button.
+
 ## Open decisions
 - Inbound provider: Postmark for now. The adapter is isolated in `src/inbound/postmark.ts`.
 - `REQUIRE_KNOWN_SENDER` default: currently false, so the random address token is the secret.
 - Product name: Paperbrew (decided 2026-11-01). The domain is TBD.
 
 ## Next tasks
-1. Sign-up: create the user and their inbound address token (three random words, e.g. `amber-otter-lantern`; see `src/inbound/address.ts`).
+1. ~~Sign-up~~ done: Better Auth creates the user and their three-word inbound address token (see `src/inbound/address.ts`).
 2. Web paste-a-link endpoint, reusing `fetch_article` with `added_via = 'web'`.
-3. Articles API: list, rename, delete.
+3. ~~Articles API~~ done: list, remove, and address change. Rename is still to do.
 4. Confirmation reply email ("Saved 2 articles"), and a reply on failure.
-5. Magazine model plus print/PDF rendering (booklet imposition for A4).
+5. Magazine model plus print/PDF rendering. `GET /brew` already renders all saved articles to a PDF; booklet imposition for A4 is still to do.

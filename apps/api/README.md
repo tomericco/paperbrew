@@ -36,7 +36,7 @@ npm run worker                  # in a second terminal
 npm test                        # unit tests (no DB needed)
 ```
 
-Seed a user and an address:
+Users and their addresses are created on first sign-in (Better Auth). Set `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` and at least one provider's client pair in `.env`, then sign in through the web app (`npm run dev:web`). To skip sign-in in a quick test, seed a user by hand:
 
 ```sql
 insert into users (email) values ('you@example.com') returning id;
@@ -81,7 +81,10 @@ The API runs as one Vercel Node.js function (`api/index.ts`); `vercel.json` rout
 
 ```
 src/
-  app.ts                  Hono app: webhook, health, cron
+  app.ts                  Hono app: webhook, health, cron, auth, library and brew routes
+  auth/                   Better Auth setup, enabled providers, user provisioning
+  routes/library.ts       /me, /me/address, /articles (signed-in user)
+  brew/                   GET /brew: articles to a PDF magazine
   server.ts               local server (npm run dev)
   inbound/postmark.ts     Postmark payload → InboundEmail (add other providers here)
   inbound/address.ts      address template, word tokens, recipient → token
@@ -98,6 +101,6 @@ src/
 
 - Send a confirmation reply ("Saved 2 articles") and a reply for failures.
 - Add the web paste-a-link endpoint. It reuses the `fetch_article` pipeline with `added_via = 'web'`.
-- Sign-up flow that creates a user and their inbound address.
-- API for the Articles page: list, rename, delete.
+- Rename articles (list and remove exist).
+- Booklet imposition for `/brew` (A4 folded, two-sided).
 - Sites that need JavaScript or are paywalled will fail extraction. Mark them clearly in the UI.
