@@ -81,6 +81,14 @@ describe('normalizeCloudmailin', () => {
     expect(normalizeCloudmailin(other).providerMessageId).not.toBe(a.providerMessageId);
   });
 
+  it('treats a blank Message-ID as missing, so blank ids never collide as duplicates', () => {
+    const body = cloudmailinForwardedFixture();
+    body.headers.message_id = '   ';
+    const email = normalizeCloudmailin(body);
+    expect(email.messageId).toBeNull();
+    expect(email.providerMessageId).toMatch(/^[0-9a-f]{64}$/);
+  });
+
   it('throws on a body without an envelope', () => {
     const body = cloudmailinForwardedFixture();
     delete body.envelope;

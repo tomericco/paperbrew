@@ -43,7 +43,8 @@ export function normalizeCloudmailin(body: unknown): InboundEmail {
   const date = header('date');
   const text = p.plain ?? '';
   const html = p.html ?? '';
-  const messageId = header('message_id');
+  // A blank Message-ID would make every later blank-id email look like a duplicate.
+  const messageId = header('message_id')?.trim() || null;
 
   const recipients = [
     ...(p.envelope.recipients ?? []),
