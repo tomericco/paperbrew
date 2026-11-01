@@ -110,7 +110,8 @@ function LibraryContent() {
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
+      // Safari can cancel the download if the URL is revoked in the same task as the click.
+      setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch {
       setBrewError('Brewing failed.');
     } finally {
