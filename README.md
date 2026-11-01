@@ -2,6 +2,8 @@
 
 Turns the articles people save from Hacker News, blogs and newsletters into a magazine they print at home.
 
+Live: web https://paperbrew-web.vercel.app · API https://paperbrew-api.vercel.app (Vercel, deploys on every push to `main`; database on Supabase).
+
 npm workspaces monorepo:
 
 ```
