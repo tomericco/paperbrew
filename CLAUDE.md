@@ -23,7 +23,7 @@ npm workspaces monorepo. Run scripts from the root, or target one workspace with
 - Shared compiler options live in `tsconfig.base.json`; each workspace extends it.
 
 ## apps/api: backend, email capture
-- Stack: TypeScript (ESM, NodeNext), Hono on Node 20+, Postgres (`pg`), Postmark inbound webhook, Mozilla Readability + jsdom, sanitize-html, zod.
+- Stack: TypeScript (ESM, NodeNext), Hono on Node 22, Postgres (`pg`), Postmark inbound webhook, Mozilla Readability + jsdom, sanitize-html, zod.
 - The job queue is a Postgres table claimed with `FOR UPDATE SKIP LOCKED`; there is no Redis.
 - Flow: `POST /webhooks/postmark/inbound` stores the email in `inbound_emails` and queues `process_email`. `process_email` turns it into article rows: each link gets a `fetch_article` job, and a long newsletter is saved directly. See `apps/api/README.md` for the full rules.
 - The decision logic lives in `src/inbound/plan.ts` and is pure, so it's tested without a database.
@@ -42,6 +42,7 @@ All from the repo root:
 - Keep pure logic (planning, link cleaning, extraction) separate from I/O so it stays unit-testable. Add a test with every behavior change.
 - Every outbound fetch goes through `src/fetch/safeFetch.ts` (SSRF guard). Never use bare `fetch` for user-supplied URLs.
 - Stored article HTML must go through `sanitizeArticleHtml`.
+- `sanitize-html` is pinned to 2.17.5 and `htmlparser2` is overridden to v10 in the root `package.json`: newer versions need the ESM-only htmlparser2 v12, which crashes on Vercel (`ERR_REQUIRE_ESM`). Don't bump either without deploying and checking `/health`.
 - The webhook returns 200 for anything ignored on purpose and 5xx only for real failures, which Postmark retries.
 - Schema changes are additive and idempotent (`if not exists`) until a migration tool is adopted.
 
