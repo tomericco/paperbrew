@@ -33,13 +33,15 @@ function after(html: string, marker: string): string {
 }
 
 describe('renderMagazine', () => {
-  it('renders the masthead, contents in order and both bodies', () => {
+  it('renders the masthead, the articles in order and both bodies, with no contents page', () => {
     const html = renderMagazine({ articles: [first, second], date: DATE });
     expect(html).toMatch(/<h1[^>]*>Paperbrew<\/h1>/);
+    expect(html).not.toContain('class="contents"');
+    expect(html).not.toContain('>Contents<');
 
-    const contents = after(html, 'class="contents"');
-    const a = contents.indexOf('Choose Boring Technology');
-    const b = contents.indexOf('The Bitter Lesson');
+    const articles = after(html, 'class="article"');
+    const a = articles.indexOf('Choose Boring Technology');
+    const b = articles.indexOf('The Bitter Lesson');
     expect(a).toBeGreaterThan(0);
     expect(b).toBeGreaterThan(a);
 
@@ -82,7 +84,7 @@ describe('renderMagazine', () => {
     expect(html).not.toContain('b=<x>');
   });
 
-  it('skips articles with null or empty content in the contents and the body', () => {
+  it('skips articles with null or empty content', () => {
     const html = renderMagazine({
       articles: [
         article({ title: 'Pending one', contentHtml: null }),
@@ -101,6 +103,11 @@ describe('renderMagazine', () => {
   it('sets an A4 page', () => {
     const html = renderMagazine({ articles: [first], date: DATE });
     expect(html).toMatch(/@page\s*\{[^}]*size:\s*A4/);
+  });
+
+  it('sets article bodies in a single column', () => {
+    const html = renderMagazine({ articles: [first], date: DATE });
+    expect(html).not.toMatch(/column-count/);
   });
 
   it('shows total reading time on the cover and per-article minutes', () => {
@@ -122,7 +129,7 @@ describe('renderMagazine', () => {
   it('lists up to three titles on the cover and counts the rest', () => {
     const many = ['One', 'Two', 'Three', 'Four', 'Five'].map((t) => article({ title: t }));
     const html = renderMagazine({ articles: many, date: DATE });
-    const cover = html.slice(0, html.indexOf('class="contents"'));
+    const cover = html.slice(0, html.indexOf('class="article"'));
     expect(cover).toContain('One');
     expect(cover).toContain('Three');
     expect(cover).not.toContain('Four');

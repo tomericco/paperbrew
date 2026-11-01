@@ -1,7 +1,8 @@
 // Turns saved articles into one print-ready HTML document (the magazine).
 // Pure: no I/O, so it is unit-tested directly. pdf.ts prints the result with Chromium.
 //
-// Typography and structure follow docs/design/the-issue (Cover, Contents, ArticleOpener).
+// Typography and structure follow docs/design/the-issue (Cover, ArticleOpener), set in one column.
+// The design's Contents page is left out.
 
 export type BrewArticle = {
   title: string | null;
@@ -123,24 +124,6 @@ function cover(pieces: Piece[], date: Date): string {
   </section>`;
 }
 
-function contents(pieces: Piece[]): string {
-  const rows = pieces
-    .map((p) => {
-      const meta = [p.author, p.site].filter(Boolean).map((s) => escapeHtml(s as string)).join(' · ');
-      return `<div class="row">
-        <span class="n mono">${p.number}</span>
-        <div class="what"><span class="t">${escapeHtml(p.title)}</span>${meta ? `<span class="m">${meta}</span>` : ''}</div>
-        <span class="min mono">${p.minutes ? `${p.minutes} min` : ''}</span>
-      </div>`;
-    })
-    .join('\n');
-  return `<section class="contents">
-    <h2 class="contents-title">Contents</h2>
-    <div class="rule"></div>
-    <div class="rows">${rows}</div>
-  </section>`;
-}
-
 function article(p: Piece): string {
   const kicker = [p.number, p.site && escapeHtml(p.site), p.minutes && `${p.minutes} min read`]
     .filter(Boolean)
@@ -186,18 +169,6 @@ body { margin: 0; background: #fff; color: #111; font-family: 'Source Serif 4', 
 .stats { display: flex; justify-content: space-between; margin-top: 10px; }
 .empty { margin: 0 0 8px; font-size: 20px; font-style: italic; line-height: 1.3; }
 
-/* Contents */
-.contents { break-before: page; }
-.contents-title { margin: 48px 0 0; font-size: 44px; line-height: 1; font-weight: 700; letter-spacing: -0.02em; }
-.contents .rule { margin-top: 16px; }
-.rows { display: flex; flex-direction: column; gap: 22px; margin-top: 22px; }
-.row { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; column-gap: 8px; align-items: baseline; break-inside: avoid; }
-.row .n { font-size: 13px; letter-spacing: 0; }
-.row .what { display: flex; flex-direction: column; gap: 2px; }
-.row .t { font-size: 18px; font-weight: 600; line-height: 1.25; }
-.row .m { font-size: 14px; color: #4a4a4a; }
-.row .min { letter-spacing: 0; text-transform: none; }
-
 /* Articles: each starts on a new page. */
 .article { break-before: page; }
 .kicker { margin: 24px 0 0; }
@@ -205,8 +176,7 @@ body { margin: 0; background: #fff; color: #111; font-family: 'Source Serif 4', 
 .byline { margin: 12px 0 0; font-size: 18px; font-style: italic; }
 .article > .rule { margin-top: 18px; }
 .body {
-  margin-top: 18px; column-count: 2; column-gap: 8mm; column-rule: 0.5pt solid #111;
-  font-size: 10.5pt; line-height: 1.45; text-align: justify; hyphens: auto; -webkit-hyphens: auto;
+  margin-top: 18px; font-size: 11.5pt; line-height: 1.5; text-align: justify; hyphens: auto; -webkit-hyphens: auto;
   overflow-wrap: break-word;
 }
 .body > :first-child { margin-top: 0; }
@@ -246,7 +216,6 @@ export function renderMagazine(input: { articles: BrewArticle[]; date: Date }): 
 </head>
 <body>
 ${cover(pieces, input.date)}
-${pieces.length ? contents(pieces) : ''}
 ${pieces.map(article).join('\n')}
 </body>
 </html>
