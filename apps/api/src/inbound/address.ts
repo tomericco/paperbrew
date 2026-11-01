@@ -21,19 +21,23 @@ const RESERVED = new Set([
   'paperbrew',
 ]);
 
-const TOKEN_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+// Two or more words: a single word like "tomer" is too easy to guess, and the address is the secret.
+const TOKEN_RE = /^[a-z0-9]+(-[a-z0-9]+)+$/;
 const MIN_LEN = 3;
 const MAX_LEN = 40;
 
 export type TokenResult = { ok: true; token: string } | { ok: false; error: string };
 
-/** Validate and canonicalize a mailbox token (trim, lowercase, shape, reserved names). */
+/** Validate and canonicalize a mailbox token (trim, lowercase, reserved names, shape). */
 export function normalizeToken(input: string): TokenResult {
   const token = input.trim().toLowerCase();
-  if (token.length < MIN_LEN || token.length > MAX_LEN || !TOKEN_RE.test(token)) {
-    return { ok: false, error: 'Use 3–40 letters, numbers and single hyphens.' };
-  }
   if (RESERVED.has(token)) return { ok: false, error: 'That address is reserved.' };
+  if (token.length < MIN_LEN || token.length > MAX_LEN || !TOKEN_RE.test(token)) {
+    return {
+      ok: false,
+      error: 'Use two or more words joined by hyphens, like amber-otter (letters and numbers, up to 40 characters).',
+    };
+  }
   return { ok: true, token };
 }
 

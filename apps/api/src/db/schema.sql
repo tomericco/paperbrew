@@ -23,10 +23,11 @@ create table if not exists inbound_addresses (
   created_at   timestamptz not null default now(),
   disabled_at  timestamptz
 );
--- Word tokens (hyphens allowed, 3-40 chars). Replaces the older letters-only check; idempotent.
+-- Word tokens: two or more words joined by single hyphens, 3-40 chars. Replaces the older
+-- letters-only check; idempotent.
 alter table inbound_addresses drop constraint if exists inbound_addresses_token_check;
 alter table inbound_addresses add constraint inbound_addresses_token_check
-  check (token ~ '^[a-z0-9]+(-[a-z0-9]+)*$' and length(token) between 3 and 40);
+  check (token ~ '^[a-z0-9]+(-[a-z0-9]+)+$' and length(token) between 3 and 40);
 
 -- Extra sender addresses a user may forward from (used when REQUIRE_KNOWN_SENDER=true).
 create table if not exists sender_aliases (

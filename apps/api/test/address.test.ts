@@ -73,9 +73,19 @@ describe('normalizeToken', () => {
     expect(normalizeToken('  Amber-Otter ')).toEqual({ ok: true, token: 'amber-otter' });
   });
 
-  it.each(['ab', '-amber', 'amber-', 'amber--otter', 'amber otter', 'x'.repeat(41), ''])('rejects %j', (input) => {
-    const r = normalizeToken(input);
-    expect(r).toEqual({ ok: false, error: 'Use 3–40 letters, numbers and single hyphens.' });
+  it.each(['ab', 'tomer', 'reader42', '-amber', 'amber-', 'amber--otter', 'amber otter', 'a-' + 'x'.repeat(39), ''])(
+    'rejects %j',
+    (input) => {
+      const r = normalizeToken(input);
+      expect(r).toEqual({
+        ok: false,
+        error: 'Use two or more words joined by hyphens, like amber-otter (letters and numbers, up to 40 characters).',
+      });
+    },
+  );
+
+  it('accepts two short words', () => {
+    expect(normalizeToken('a-b')).toEqual({ ok: true, token: 'a-b' });
   });
 
   it.each(['postmaster', 'Admin', 'no-reply', 'paperbrew'])('refuses reserved %j', (input) => {
