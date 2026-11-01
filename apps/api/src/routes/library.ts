@@ -39,9 +39,8 @@ export const requireUser = createMiddleware<UserEnv>(async (c, next) => {
 });
 
 export const library = new Hono<UserEnv>();
-library.use('/me', requireUser);
+// In Hono, '/me/*' also matches '/me' (and '/articles/*' matches '/articles'), so each guard runs once.
 library.use('/me/*', requireUser);
-library.use('/articles', requireUser);
 library.use('/articles/*', requireUser);
 
 const addressOf = (token: string) => ({ address: formatAddress(config.INBOUND_ADDRESS, token), token });

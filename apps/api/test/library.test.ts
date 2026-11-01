@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // app.ts loads Better Auth, the DB pool and config at import time. Requests below carry no cookie,
 // so getSession answers null and no query reaches the database.
@@ -18,6 +18,8 @@ vi.mock('../src/config.js', () => ({
 }));
 
 const { app } = await import('../src/app.js');
+const { auth } = await import('../src/auth/auth.js');
+const { pool } = await import('../src/db/client.js');
 
 describe('signed-in user routes without a session', () => {
   const ARTICLE = '/articles/00000000-0000-0000-0000-000000000000';
@@ -33,5 +35,27 @@ describe('signed-in user routes without a session', () => {
     const res = await app.request(path, { method, ...init });
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: 'unauthorized' });
+  });
+});
+
+describe('requireUser', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each(['/me', '/articles'])('checks the session once on GET %s', async (path) => {
+    const getSession = vi
+      .spyOn(auth.api, 'getSession')
+      .mockResolvedValue({ user: { id: 'auth-1', email: 'a@example.com' }, session: {} } as never);
+    const query = vi.spyOn(pool, 'query').mockImplementation((async (sql: string) => {
+      if (/from users where auth_user_id/.test(sql)) return { rows: [{ id: 'user-1' }] };
+      if (/from users u join inbound_addresses/.test(sql)) return { rows: [{ token: 'amber-otter', email: 'a@example.com' }] };
+      return { rows: [] };
+    }) as never);
+
+    const res = await app.request(path, { headers: { cookie: 'better-auth.session_token=x' } });
+
+    expect(res.status).toBe(200);
+    expect(getSession).toHaveBeenCalledTimes(1);
+    const lookups = query.mock.calls.filter(([sql]) => /auth_user_id/.test(String(sql)));
+    expect(lookups).toHaveLength(1);
   });
 });
