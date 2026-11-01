@@ -87,3 +87,12 @@ create table if not exists jobs (
   last_error    text
 );
 create index if not exists jobs_ready_idx on jobs (run_at) where done_at is null;
+
+-- Supabase exposes the public schema over its REST API with the anon key. RLS with no policies
+-- shuts that off; the backend connects as the table owner, which bypasses RLS.
+alter table users enable row level security;
+alter table inbound_addresses enable row level security;
+alter table sender_aliases enable row level security;
+alter table inbound_emails enable row level security;
+alter table articles enable row level security;
+alter table jobs enable row level security;
