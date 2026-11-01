@@ -8,6 +8,10 @@ create table if not exists users (
   email       text not null unique,
   created_at  timestamptz not null default now()
 );
+-- Every user signs in through Better Auth (auth_users below). The email is null when the
+-- provider gives none (Reddit), so it's only a contact hint, not an identity.
+alter table users alter column email drop not null;
+alter table users add column if not exists auth_user_id text unique;
 
 -- Each user gets a mailbox token (three random words, e.g. amber-otter-lantern),
 -- delivered to INBOUND_ADDRESS with {token} filled in.
@@ -93,6 +97,57 @@ create table if not exists jobs (
 );
 create index if not exists jobs_ready_idx on jobs (run_at) where done_at is null;
 
+-- Better Auth tables (modelName auth_*). Columns are Better Auth 1.7's own camelCase names,
+-- generated with its Postgres migration compiler and made idempotent. Don't rename them.
+create table if not exists auth_users (
+  "id"             text not null primary key,
+  "name"           text not null,
+  "email"          text not null unique,
+  "emailVerified"  boolean not null,
+  "image"          text,
+  "createdAt"      timestamptz not null default current_timestamp,
+  "updatedAt"      timestamptz not null default current_timestamp
+);
+
+create table if not exists auth_sessions (
+  "id"         text not null primary key,
+  "expiresAt"  timestamptz not null,
+  "token"      text not null unique,
+  "createdAt"  timestamptz not null default current_timestamp,
+  "updatedAt"  timestamptz not null,
+  "ipAddress"  text,
+  "userAgent"  text,
+  "userId"     text not null references auth_users ("id") on delete cascade
+);
+create index if not exists "auth_sessions_userId_idx" on auth_sessions ("userId");
+
+create table if not exists auth_accounts (
+  "id"                     text not null primary key,
+  "accountId"              text not null,
+  "providerId"             text not null,
+  "userId"                 text not null references auth_users ("id") on delete cascade,
+  "accessToken"            text,
+  "refreshToken"           text,
+  "idToken"                text,
+  "accessTokenExpiresAt"   timestamptz,
+  "refreshTokenExpiresAt"  timestamptz,
+  "scope"                  text,
+  "password"               text,
+  "createdAt"              timestamptz not null default current_timestamp,
+  "updatedAt"              timestamptz not null
+);
+create index if not exists "auth_accounts_userId_idx" on auth_accounts ("userId");
+
+create table if not exists auth_verifications (
+  "id"          text not null primary key,
+  "identifier"  text not null,
+  "value"       text not null,
+  "expiresAt"   timestamptz not null,
+  "createdAt"   timestamptz not null default current_timestamp,
+  "updatedAt"   timestamptz not null default current_timestamp
+);
+create index if not exists "auth_verifications_identifier_idx" on auth_verifications ("identifier");
+
 -- Supabase exposes the public schema over its REST API with the anon key. RLS with no policies
 -- shuts that off; the backend connects as the table owner, which bypasses RLS.
 alter table users enable row level security;
@@ -101,3 +156,7 @@ alter table sender_aliases enable row level security;
 alter table inbound_emails enable row level security;
 alter table articles enable row level security;
 alter table jobs enable row level security;
+alter table auth_users enable row level security;
+alter table auth_sessions enable row level security;
+alter table auth_accounts enable row level security;
+alter table auth_verifications enable row level security;

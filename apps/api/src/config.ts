@@ -9,6 +9,10 @@ const Env = z.object({
     .min(3)
     .transform((a) => a.toLowerCase())
     .refine((a) => a.split('{token}').length === 2, 'INBOUND_ADDRESS must contain {token} exactly once'),
+  // Signs Better Auth sessions and encrypts OAuth tokens. Generate with `openssl rand -base64 32`.
+  BETTER_AUTH_SECRET: z.string().min(32),
+  // The web origin (sign-in runs on the web app's domain, proxied to /api/auth here).
+  BETTER_AUTH_URL: z.string().url(),
   POSTMARK_WEBHOOK_USER: z.string().min(1),
   POSTMARK_WEBHOOK_PASSWORD: z.string().min(16),
   REQUIRE_KNOWN_SENDER: z

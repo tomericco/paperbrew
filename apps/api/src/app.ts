@@ -8,6 +8,8 @@ import { enqueue } from './jobs/queue.js';
 import { drain } from './jobs/runner.js';
 import { normalizePostmark } from './inbound/postmark.js';
 import { addressTokens } from './inbound/address.js';
+import { auth } from './auth/auth.js';
+import { enabledProviders } from './auth/providers.js';
 
 export const app = new Hono();
 
@@ -18,6 +20,12 @@ app.get('/health', async (c) => {
   await pool.query('select 1');
   return c.json({ ok: true });
 });
+
+// Better Auth keeps its /api/auth prefix through both proxies (see apps/web vercel.json and vite.config.ts).
+app.on(['GET', 'POST'], '/api/auth/*', (c) => auth.handler(c.req.raw));
+
+// Which sign-in buttons the web app should show.
+app.get('/providers', (c) => c.json({ providers: enabledProviders(process.env) }));
 
 app.post(
   '/webhooks/postmark/inbound',
