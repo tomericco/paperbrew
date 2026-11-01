@@ -1,0 +1,14 @@
+{
+  "MessageID": "a8c1040e-3f1e-4f7b-9b1d-000000000001",
+  "From": "tomer@example.com",
+  "FromFull": { "Email": "Tomer@Example.com", "Name": "Tomer" },
+  "ToFull": [{ "Email": "k7f3q9x2@save.example.com", "Name": "", "MailboxHash": "" }],
+  "CcFull": [],
+  "BccFull": [],
+  "OriginalRecipient": "k7f3q9x2@save.example.com",
+  "Subject": "Fwd: The case for slow reading",
+  "Date": "Mon, 2 Nov 2026 08:14:00 +0200",
+  "Headers": [{ "Name": "Message-ID", "Value": "<CAF=abc@mail.gmail.com>" }],
+  "TextBody": "Save this one for the flight.\n\n---------- Forwarded message ---------\nFrom: Slow Notes <hello@slownotes.example>\nDate: Sun, Nov 1, 2026 at 9:00 AM\nSubject: The case for slow reading\nTo: <tomer@example.com>\n\n__PARAGRAPHS__\n\nUnsubscribe: https://slownotes.example/unsubscribe?u=1",
+  "HtmlBody": "<div dir=\"ltr\">Save this one for the flight.<br><br><div class=\"gmail_quote\"><div dir=\"ltr\" class=\"gmail_attr\">---------- Forwarded message ---------<br>From: <strong>Slow Notes</strong> &lt;hello@slownotes.example&gt;<br>Date: Sun, Nov 1, 2026 at 9:00 AM<br>Subject: The case for slow reading<br></div><br><table><tr><td><h1>The case for slow reading</h1>__HTML_PARAGRAPHS__<p><a href=\"https://slownotes.example/unsubscribe?u=1\">Unsubscribe</a></p></td></tr></table></div></div>"
+}

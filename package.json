@@ -1,0 +1,21 @@
+{
+  "name": "paperbrew",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @paperbrew/api",
+    "dev:web": "npm run dev -w @paperbrew/web",
+    "worker": "npm run worker -w @paperbrew/api",
+    "db:migrate": "npm run db:migrate -w @paperbrew/api",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm test --workspaces --if-present"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "name": "@paperbrew/api",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/server.ts",
+    "worker": "tsx --env-file=.env src/jobs/worker.ts",
+    "db:migrate": "tsx --env-file=.env src/db/migrate.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "start:worker": "node dist/jobs/worker.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.17",
+    "@mozilla/readability": "^0.6.0",
+    "@vercel/functions": "^3.10.5",
+    "hono": "^4.13.16",
+    "jsdom": "^26.1.0",
+    "pg": "^8.23.1",
+    "sanitize-html": "^2.18.1",
+    "undici": "^7.30.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^21.1.7",
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "@types/sanitize-html": "^2.16.2",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}
