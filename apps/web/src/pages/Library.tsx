@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { authClient } from '../auth';
+import { Layout } from '../Layout';
 
 type Me = { address: string; token: string; email: string | null };
 
@@ -29,11 +31,11 @@ export function Library() {
     if (!isPending && !session) location.replace('/signin');
   }, [isPending, session]);
 
-  if (isPending || !session) return <p>Loading…</p>;
-  return <LibraryContent />;
+  if (isPending || !session) return <Layout>{null}</Layout>;
+  return <LibraryContent name={session.user.name} />;
 }
 
-function LibraryContent() {
+function LibraryContent({ name }: { name: string }) {
   const [me, setMe] = useState<Me | null>(null);
   const [articles, setArticles] = useState<Article[] | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -133,61 +135,127 @@ function LibraryContent() {
     }
   }
 
-  if (loadError) return <p>{loadError}</p>;
-  if (!me || !articles) return <p>Loading…</p>;
-
-  return (
-    <main>
-      <h1>Your library</h1>
-
-      <p>
-        Forward articles to: <code>{me.address}</code>{' '}
-        <button type="button" onClick={() => setEditing((v) => !v)}>
-          Change
-        </button>
-      </p>
-      {editing && (
-        <p>
-          <input value={token} onChange={(e) => setToken(e.target.value)} aria-label="Address name" />{' '}
-          <button type="button" onClick={saveAddress}>
-            Save
-          </button>
-        </p>
-      )}
-      {addressMessage && <p role="status">{addressMessage}</p>}
-
-      <p>
-        <button type="button" onClick={brew} disabled={brewing}>
-          {brewing ? 'Brewing…' : 'Brew'}
-        </button>
-        {brewError && <span role="alert"> {brewError}</span>}
-      </p>
-
-      <p>
-        <button type="button" onClick={signOut}>
-          Sign out
-        </button>
-      </p>
-
-      {articles.length === 0 ? (
-        <p>No articles yet. Forward an email with a link to the address above.</p>
-      ) : (
-        <ul>
-          {articles.map((article) => (
-            <li key={article.id}>
-              {article.sourceUrl ? (
-                <a href={article.sourceUrl}>{article.title ?? article.sourceUrl}</a>
-              ) : (
-                (article.title ?? 'Untitled')
-              )}
-              {article.siteName && ` · ${article.siteName}`} · {article.status}{' '}
-              <button type="button" onClick={() => remove(article.id)}>
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </main>
+  const header = (
+    <>
+      <span className="who">{name}</span>
+      <button type="button" className="btn" onClick={signOut}>
+        Sign out
+      </button>
+    </>
   );
+
+  let content: ReactNode;
+  if (loadError) content = <p className="error">{loadError}</p>;
+  else if (!me || !articles) content = <p className="muted">Loading…</p>;
+  else
+    content = (
+      <div className="grid">
+        <aside className="span-4 stack">
+          <section className="card">
+            <h2>Your address</h2>
+            <p className="muted small">Forward articles and newsletters here.</p>
+            <code className="address">{me.address}</code>
+            {editing ? (
+              <div className="row">
+                <input
+                  className="input"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  aria-label="Address name"
+                />
+                <button type="button" className="btn" onClick={saveAddress}>
+                  Save
+                </button>
+              </div>
+            ) : (
+              <div className="row">
+                <button type="button" className="btn" onClick={() => navigator.clipboard?.writeText(me.address)}>
+                  Copy
+                </button>
+                <button type="button" className="btn" onClick={() => setEditing(true)}>
+                  Change
+                </button>
+              </div>
+            )}
+            {addressMessage && (
+              <p className="message" role="status">
+                {addressMessage}
+              </p>
+            )}
+          </section>
+
+          <section className="card">
+            <h2>Brew an issue</h2>
+            <p className="muted small">Download every saved article as a print-ready PDF magazine.</p>
+            <button
+              type="button"
+              className="btn btn-primary btn-block"
+              onClick={brew}
+              disabled={brewing || articles.length === 0}
+            >
+              {brewing ? 'Brewing…' : 'Brew'}
+            </button>
+            {brewError && (
+              <p className="error" role="alert">
+                {brewError}
+              </p>
+            )}
+          </section>
+        </aside>
+
+        <section className="span-8">
+          <div className="page-head">
+            <h1>Your library</h1>
+            <span className="muted">
+              {articles.length} {articles.length === 1 ? 'article' : 'articles'}
+            </span>
+          </div>
+          {articles.length === 0 ? (
+            <div className="card empty muted">No articles yet. Forward an email with a link to your address.</div>
+          ) : (
+            <ul className="list">
+              {articles.map((article) => (
+                <li key={article.id} className="list-item">
+                  <div className="body">
+                    {article.sourceUrl ? (
+                      <a className="title" href={article.sourceUrl}>
+                        {article.title ?? article.sourceUrl}
+                      </a>
+                    ) : (
+                      <span className="title">{article.title ?? 'Untitled'}</span>
+                    )}
+                    <div className="muted small">{articleMeta(article)}</div>
+                  </div>
+                  <button type="button" className="btn btn-quiet" onClick={() => remove(article.id)}>
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    );
+
+  return <Layout actions={header}>{content}</Layout>;
+}
+
+const STATUS: Record<Article['status'], ReactNode> = {
+  ready: null,
+  pending: <span className="badge">Fetching</span>,
+  failed: <span className="badge badge-failed">Failed</span>,
+};
+
+function articleMeta(article: Article): ReactNode {
+  const parts: ReactNode[] = [];
+  if (article.siteName) parts.push(article.siteName);
+  if (article.wordCount) parts.push(`${Math.max(1, Math.round(article.wordCount / 230))} min read`);
+  parts.push(new Date(article.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
+  if (STATUS[article.status]) parts.push(STATUS[article.status]);
+  return parts.map((part, i) => (
+    <span key={i}>
+      {i > 0 && ' · '}
+      {part}
+    </span>
+  ));
 }
