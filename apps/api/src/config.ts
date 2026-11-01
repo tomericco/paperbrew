@@ -3,7 +3,12 @@ import { z } from 'zod';
 const Env = z.object({
   DATABASE_URL: z.string().min(1),
   PORT: z.coerce.number().default(8787),
-  INBOUND_DOMAIN: z.string().min(3).transform((d) => d.toLowerCase()),
+  // Address template, e.g. "{token}@save.example.com" or "a1b2c3+{token}@inbound.postmarkapp.com".
+  INBOUND_ADDRESS: z
+    .string()
+    .min(3)
+    .transform((a) => a.toLowerCase())
+    .refine((a) => a.split('{token}').length === 2, 'INBOUND_ADDRESS must contain {token} exactly once'),
   POSTMARK_WEBHOOK_USER: z.string().min(1),
   POSTMARK_WEBHOOK_PASSWORD: z.string().min(16),
   REQUIRE_KNOWN_SENDER: z

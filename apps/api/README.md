@@ -1,6 +1,6 @@
 # @paperbrew/api: email capture (MVP)
 
-Users forward emails to a private address like `k7f3q9x2@save.yourdomain.com`.
+Users forward emails to a private address like `amber-otter-lantern@save.yourdomain.com`.
 This service turns each email into saved articles that the magazine builder can use later.
 
 ```
@@ -40,14 +40,14 @@ Seed a user and an address:
 
 ```sql
 insert into users (email) values ('you@example.com') returning id;
-insert into inbound_addresses (user_id, token) values ('<id>', 'k7f3q9x2');
+insert into inbound_addresses (user_id, token) values ('<id>', 'amber-otter-lantern');
 ```
 
 Send a test email without Postmark:
 
 ```bash
 curl -u postmark:$POSTMARK_WEBHOOK_PASSWORD -H 'content-type: application/json' \
-  -d '{"MessageID":"t1","From":"you@example.com","ToFull":[{"Email":"k7f3q9x2@save.example.com"}],"Subject":"test","TextBody":"https://paulgraham.com/greatwork.html"}' \
+  -d '{"MessageID":"t1","From":"you@example.com","ToFull":[{"Email":"amber-otter-lantern@save.example.com"}],"Subject":"test","TextBody":"https://paulgraham.com/greatwork.html"}' \
   localhost:8787/webhooks/postmark/inbound
 ```
 
@@ -55,21 +55,22 @@ curl -u postmark:$POSTMARK_WEBHOOK_PASSWORD -H 'content-type: application/json' 
 
 1. Create a server in Postmark and open its **Inbound** message stream.
 2. Set the webhook URL with basic auth: `https://postmark:<POSTMARK_WEBHOOK_PASSWORD>@api.yourdomain.com/webhooks/postmark/inbound`.
-3. Set an inbound domain (e.g. `save.yourdomain.com`) and add the MX record Postmark gives you for it (`inbound.postmarkapp.com`). Every address on that domain then reaches the webhook.
-4. Set `INBOUND_DOMAIN=save.yourdomain.com`.
+3. Choose how addresses look, then set `INBOUND_ADDRESS` to that template (`{token}` is each user's word token, e.g. `amber-otter-lantern`):
+   - Your own domain: set an inbound domain (e.g. `save.yourdomain.com`) and add the MX record Postmark gives you for it (`inbound.postmarkapp.com`). Every address on that domain reaches the webhook. `INBOUND_ADDRESS={token}@save.yourdomain.com`.
+   - Postmark's shared address: `INBOUND_ADDRESS=a1b2c3+{token}@inbound.postmarkapp.com`, where `a1b2c3` is your server's inbound hash. Plus-tags after the token (`...+trip`) are ignored.
 
 ## Deploy (Vercel)
 
 The API runs as one Vercel Node.js function (`api/index.ts`); `vercel.json` routes every path to it. There is no worker on Vercel: a new email triggers `drain()` via `waitUntil` once the webhook has answered, and a daily cron calls `GET /cron/run-jobs` to retry what's left. Set the project root to `apps/api` and these env vars:
 
 - `POSTGRES_URL` (set by the Supabase integration) or `DATABASE_URL`
-- `INBOUND_DOMAIN`
+- `INBOUND_ADDRESS`
 - `POSTMARK_WEBHOOK_USER`, `POSTMARK_WEBHOOK_PASSWORD`
 - `CRON_SECRET` (Vercel sends it to the cron as a bearer token; without it the endpoint answers 401)
 
 ## Security notes
 
-- **Addresses are secret.** Tokens are random, so anyone who knows an address can add to that library. Set `REQUIRE_KNOWN_SENDER=true` to accept only the account email and verified aliases (`sender_aliases`). To rotate an address, set `disabled_at` and issue a new token.
+- **Addresses are secret.** Tokens are three random words, so anyone who knows an address can add to that library. Set `REQUIRE_KNOWN_SENDER=true` to accept only the account email and verified aliases (`sender_aliases`). To rotate an address, set `disabled_at` and issue a new token.
 - **Fetching is SSRF-safe.** IP-literal hosts are checked before connecting, and every DNS answer is checked at connect time, which also covers redirects and DNS rebinding. Private, loopback, link-local and metadata ranges are refused. Other limits: a 15 s timeout, a 5 MB cap, HTML only, and at most 6 redirects.
 - **Stored HTML is sanitized** to print-friendly tags. There are no scripts, styles, classes or event handlers, and tracking pixels are dropped.
 - **The webhook handles retries.** It always answers 200 for emails it deliberately ignores (unknown address, malformed payload), so Postmark doesn't retry them. It answers 500 only on real failures, which Postmark retries, and repeated deliveries are deduped by `MessageID`.
@@ -81,7 +82,7 @@ src/
   app.ts                  Hono app: webhook, health, cron
   server.ts               local server (npm run dev)
   inbound/postmark.ts     Postmark payload → InboundEmail (add other providers here)
-  inbound/recipients.ts   address → token
+  inbound/address.ts      address template, word tokens, recipient → token
   inbound/plan.ts         what to save from an email (forward detection, newsletter vs links)
   links/                  URL cleaning, article-link filtering
   fetch/                  SSRF-safe fetcher

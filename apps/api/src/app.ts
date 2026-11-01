@@ -7,7 +7,7 @@ import { pool } from './db/client.js';
 import { enqueue } from './jobs/queue.js';
 import { drain } from './jobs/runner.js';
 import { normalizePostmark } from './inbound/postmark.js';
-import { addressTokens } from './inbound/recipients.js';
+import { addressTokens } from './inbound/address.js';
 
 export const app = new Hono();
 
@@ -32,10 +32,10 @@ app.post(
       return c.json({ ok: true, ignored: 'malformed' });
     }
 
-    const tokens = addressTokens(email.recipients, config.INBOUND_DOMAIN);
+    const tokens = addressTokens(email.recipients, config.INBOUND_ADDRESS);
     if (!tokens.length) return c.json({ ok: true, ignored: 'no_paperbrew_recipient' });
 
-    const { rows: users } = await pool.query<{ user_id: string; account_email: string }>(
+    const { rows: users } = await pool.query<{ user_id: string; account_email: string | null }>(
       `select a.user_id, u.email as account_email
        from inbound_addresses a join users u on u.id = a.user_id
        where a.token = any($1) and a.disabled_at is null
@@ -45,7 +45,8 @@ app.post(
     const user = users[0];
     if (!user) return c.json({ ok: true, ignored: 'unknown_address' });
 
-    if (config.REQUIRE_KNOWN_SENDER && email.from !== user.account_email.toLowerCase()) {
+    // A user without an account email (null) can only be matched through sender_aliases.
+    if (config.REQUIRE_KNOWN_SENDER && email.from !== user.account_email?.toLowerCase()) {
       const { rowCount } = await pool.query(
         'select 1 from sender_aliases where user_id = $1 and lower(email) = $2 and verified_at is not null',
         [user.user_id, email.from],

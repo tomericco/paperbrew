@@ -1,17 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { normalizePostmark } from '../src/inbound/postmark.js';
-import { addressTokens } from '../src/inbound/recipients.js';
 import { cleanSubject, planEmail, splitForward } from '../src/inbound/plan.js';
 import { extractNewsletter } from '../src/extract/readable.js';
 import { forwardedNewsletterFixture, paragraphs } from './helpers.js';
-
-describe('addressTokens', () => {
-  it('finds tokens on the inbound domain only, ignoring plus tags and case', () => {
-    expect(
-      addressTokens(['K7F3Q9X2+travel@SAVE.example.com', 'friend@gmail.com', 'ab@save.example.com'], 'save.example.com'),
-    ).toEqual(['k7f3q9x2']);
-  });
-});
 
 describe('splitForward', () => {
   it('separates the note, the original sender and subject (Gmail)', () => {

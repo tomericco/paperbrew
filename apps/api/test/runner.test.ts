@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../src/config.js', () => ({
   config: {
     DATABASE_URL: 'postgres://localhost:5432/test',
-    INBOUND_DOMAIN: 'save.example.com',
+    INBOUND_ADDRESS: '{token}@save.example.com',
     FETCH_TIMEOUT_MS: 1000,
     FETCH_MAX_BYTES: 1000,
   },

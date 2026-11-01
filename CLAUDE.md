@@ -56,7 +56,7 @@ All from the repo root:
 - Product name: Paperbrew (decided 2026-11-01). The domain is TBD.
 
 ## Next tasks
-1. Sign-up: create the user and their inbound address token (random, 8+ chars `[a-z0-9]`).
+1. Sign-up: create the user and their inbound address token (three random words, e.g. `amber-otter-lantern`; see `src/inbound/address.ts`).
 2. Web paste-a-link endpoint, reusing `fetch_article` with `added_via = 'web'`.
 3. Articles API: list, rename, delete.
 4. Confirmation reply email ("Saved 2 articles"), and a reply on failure.
