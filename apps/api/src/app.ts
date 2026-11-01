@@ -11,6 +11,7 @@ import { addressTokens } from './inbound/address.js';
 import { auth } from './auth/auth.js';
 import { enabledProviders } from './auth/providers.js';
 import { library } from './routes/library.js';
+import { brew } from './brew/route.js';
 
 export const app = new Hono();
 
@@ -30,6 +31,9 @@ app.get('/providers', (c) => c.json({ providers: enabledProviders(process.env) }
 
 // Signed-in user API: /me, /me/address, /articles.
 app.route('/', library);
+
+// GET /brew: the signed-in user's magazine as a PDF.
+app.route('/', brew);
 
 app.post(
   '/webhooks/postmark/inbound',

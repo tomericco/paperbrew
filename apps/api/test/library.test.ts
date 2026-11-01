@@ -25,6 +25,7 @@ describe('signed-in user routes without a session', () => {
     ['GET', '/me', undefined],
     ['PUT', '/me/address', { body: JSON.stringify({ token: 'amber-otter' }), headers: { 'content-type': 'application/json' } }],
     ['GET', '/articles', undefined],
+    ['GET', '/brew', undefined],
     ['DELETE', ARTICLE, undefined],
   ];
 

@@ -21,6 +21,11 @@ const Env = z.object({
     .transform((v) => v === 'true'),
   FETCH_TIMEOUT_MS: z.coerce.number().default(15_000),
   FETCH_MAX_BYTES: z.coerce.number().default(5_000_000),
+  // Local Chrome for GET /brew. Ignored on Vercel, which uses @sparticuz/chromium.
+  CHROME_PATH: z
+    .string()
+    .optional()
+    .transform((v) => v || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
   // Required for GET /cron/run-jobs; without it the endpoint always answers 401.
   CRON_SECRET: z
     .string()

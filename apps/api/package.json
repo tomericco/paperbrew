@@ -18,11 +18,13 @@
   "dependencies": {
     "@hono/node-server": "^1.19.17",
     "@mozilla/readability": "^0.6.0",
+    "@sparticuz/chromium": "153.0.0",
     "@vercel/functions": "^3.10.5",
     "better-auth": "~1.7.15",
     "hono": "^4.13.16",
     "jsdom": "^26.1.0",
     "pg": "^8.23.1",
+    "puppeteer-core": "25.11.0",
     "sanitize-html": "2.17.5",
     "undici": "^7.30.1",
     "zod": "^3.25.76"
