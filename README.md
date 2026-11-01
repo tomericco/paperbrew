@@ -26,4 +26,4 @@ npm run typecheck    # typecheck every workspace
 
 Run one workspace's script with `npm run <script> -w @paperbrew/api`. Add a dependency with `npm install <pkg> -w @paperbrew/web`.
 
-See [apps/api/README.md](apps/api/README.md) for the backend flow, Postmark setup and security notes.
+See [apps/api/README.md](apps/api/README.md) for the backend flow, inbound email setup (CloudMailin, Postmark) and security notes.

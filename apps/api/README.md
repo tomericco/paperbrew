@@ -1,10 +1,11 @@
 # @paperbrew/api: email capture (MVP)
 
-Users forward emails to a private address like `amber-otter-lantern@save.yourdomain.com`.
+Users forward emails to a private address like `4fcb639be7306607cef6+amber-otter-lantern@cloudmailin.net`.
 This service turns each email into saved articles that the magazine builder can use later.
 
 ```
-Postmark inbound ──POST──▶ /webhooks/postmark/inbound ──▶ inbound_emails + job
+CloudMailin ──POST──▶ /webhooks/cloudmailin/inbound ─┐
+Postmark    ──POST──▶ /webhooks/postmark/inbound ────┴─▶ inbound_emails + job
                                                               │
                                      worker: process_email ◀──┘
                                        ├─ short email with links ──▶ article rows (pending) ──▶ fetch_article jobs
@@ -43,19 +44,33 @@ insert into users (email) values ('you@example.com') returning id;
 insert into inbound_addresses (user_id, token) values ('<id>', 'amber-otter-lantern');
 ```
 
-Send a test email without Postmark:
+Send a test email without a provider (CloudMailin's JSON Normalized shape; set `INBOUND_ADDRESS` to match):
 
 ```bash
-curl -u postmark:$POSTMARK_WEBHOOK_PASSWORD -H 'content-type: application/json' \
-  -d '{"MessageID":"t1","From":"you@example.com","ToFull":[{"Email":"amber-otter-lantern@save.example.com"}],"Subject":"test","TextBody":"https://paulgraham.com/greatwork.html"}' \
-  localhost:8787/webhooks/postmark/inbound
+curl -u $INBOUND_WEBHOOK_USER:$INBOUND_WEBHOOK_PASSWORD -H 'content-type: application/json' \
+  -d '{"envelope":{"from":"you@example.com","to":"4fcb639be7306607cef6+amber-otter-lantern@cloudmailin.net","recipients":["4fcb639be7306607cef6+amber-otter-lantern@cloudmailin.net"]},"headers":{"subject":"test","message_id":"<t1@local>"},"plain":"https://paulgraham.com/greatwork.html"}' \
+  localhost:8787/webhooks/cloudmailin/inbound
 ```
 
-## Postmark setup
+## Inbound email setup
+
+Both webhooks share one set of basic-auth credentials, `INBOUND_WEBHOOK_USER` and `INBOUND_WEBHOOK_PASSWORD` (16+ chars). `{token}` in `INBOUND_ADDRESS` is each user's word token, e.g. `amber-otter-lantern`; plus-tags after it (`...+trip`) are ignored.
+
+### CloudMailin (current: free, no domain needed)
+
+1. Create an address in CloudMailin. The free plan gives one like `4fcb639be7306607cef6@cloudmailin.net`, and it accepts plus-addresses, so every user gets `4fcb639be7306607cef6+<token>@cloudmailin.net`.
+2. Set the target URL, with the credentials embedded (CloudMailin sends them as basic auth): `https://<INBOUND_WEBHOOK_USER>:<INBOUND_WEBHOOK_PASSWORD>@paperbrew-api.vercel.app/webhooks/cloudmailin/inbound`.
+3. Set the POST format to **JSON (Normalized)**.
+4. Set `INBOUND_ADDRESS=4fcb639be7306607cef6+{token}@cloudmailin.net` (your own address id in place of `4fcb639be7306607cef6`).
+5. The free plan rejects messages over 512 KB, so very large newsletters (usually ones with inline images) won't arrive.
+
+Retries of one email are deduped by its `Message-ID` header, or, when it has none, by a hash of sender, date, subject and body.
+
+### Postmark (alternative)
 
 1. Create a server in Postmark and open its **Inbound** message stream.
-2. Set the webhook URL with basic auth: `https://postmark:<POSTMARK_WEBHOOK_PASSWORD>@api.yourdomain.com/webhooks/postmark/inbound`.
-3. Choose how addresses look, then set `INBOUND_ADDRESS` to that template (`{token}` is each user's word token, e.g. `amber-otter-lantern`):
+2. Set the webhook URL with basic auth: `https://<INBOUND_WEBHOOK_USER>:<INBOUND_WEBHOOK_PASSWORD>@api.yourdomain.com/webhooks/postmark/inbound`.
+3. Choose how addresses look, then set `INBOUND_ADDRESS` to that template:
    - Your own domain: set an inbound domain (e.g. `save.yourdomain.com`) and add the MX record Postmark gives you for it (`inbound.postmarkapp.com`). Every address on that domain reaches the webhook. `INBOUND_ADDRESS={token}@save.yourdomain.com`.
    - Postmark's shared address: `INBOUND_ADDRESS=a1b2c3+{token}@inbound.postmarkapp.com`, where `a1b2c3` is your server's inbound hash. Plus-tags after the token (`...+trip`) are ignored.
 
@@ -65,7 +80,7 @@ The API runs as one Vercel Node.js function (`api/index.ts`); `vercel.json` rout
 
 - `POSTGRES_URL` (set by the Supabase integration) or `DATABASE_URL`
 - `INBOUND_ADDRESS`
-- `POSTMARK_WEBHOOK_USER`, `POSTMARK_WEBHOOK_PASSWORD`
+- `INBOUND_WEBHOOK_USER`, `INBOUND_WEBHOOK_PASSWORD`
 - `CRON_SECRET` (Vercel sends it to the cron as a bearer token; without it the endpoint answers 401)
 - `BETTER_AUTH_SECRET` (32+ chars) and `BETTER_AUTH_URL` (the **web** origin, e.g. `https://paperbrew-web.vercel.app`)
 - Sign-in providers, each enabled only when both are set: `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET`, `REDDIT_CLIENT_ID`/`_SECRET`. Callback URLs are `$BETTER_AUTH_URL/api/auth/callback/{google|github|reddit}`.
@@ -75,18 +90,19 @@ The API runs as one Vercel Node.js function (`api/index.ts`); `vercel.json` rout
 - **Addresses are secret.** Tokens are three random words, so anyone who knows an address can add to that library. Set `REQUIRE_KNOWN_SENDER=true` to accept only the account email and verified aliases (`sender_aliases`). To rotate an address, set `disabled_at` and issue a new token.
 - **Fetching is SSRF-safe.** IP-literal hosts are checked before connecting, and every DNS answer is checked at connect time, which also covers redirects and DNS rebinding. Private, loopback, link-local and metadata ranges are refused. Other limits: a 15 s timeout, a 5 MB cap, HTML only, and at most 6 redirects.
 - **Stored HTML is sanitized** to print-friendly tags. There are no scripts, styles, classes or event handlers, and tracking pixels are dropped.
-- **The webhook handles retries.** It always answers 200 for emails it deliberately ignores (unknown address, malformed payload), so Postmark doesn't retry them. It answers 500 only on real failures, which Postmark retries, and repeated deliveries are deduped by `MessageID`.
+- **The webhook handles retries.** It always answers 200 for emails it deliberately ignores (unknown address, malformed payload), so the provider doesn't retry them. It answers 500 only on real failures, which CloudMailin and Postmark retry, and repeated deliveries are deduped (CloudMailin: `Message-ID` header or a content hash; Postmark: `MessageID`).
 
 ## Layout
 
 ```
 src/
-  app.ts                  Hono app: webhook, health, cron, auth, library and brew routes
+  app.ts                  Hono app: inbound webhooks, health, cron, auth, library and brew routes
   auth/                   Better Auth setup, enabled providers, user provisioning
   routes/library.ts       /me, /me/address, /articles (signed-in user)
   brew/                   GET /brew: articles to a PDF magazine
   server.ts               local server (npm run dev)
-  inbound/postmark.ts     Postmark payload → InboundEmail (add other providers here)
+  inbound/cloudmailin.ts  CloudMailin JSON (Normalized) payload → InboundEmail
+  inbound/postmark.ts     Postmark payload → InboundEmail (add other providers next to these)
   inbound/address.ts      address template, word tokens, recipient → token
   inbound/plan.ts         what to save from an email (forward detection, newsletter vs links)
   links/                  URL cleaning, article-link filtering

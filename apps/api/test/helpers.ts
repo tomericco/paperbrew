@@ -12,8 +12,17 @@ export function paragraphs(n: number): string[] {
 }
 
 export function forwardedNewsletterFixture(paragraphCount = 12): unknown {
+  return loadFixture('postmark-forwarded-newsletter.json', paragraphCount);
+}
+
+/** A Gmail forward as CloudMailin posts it (JSON Normalized), to 4fcb639be7306607cef6+amber-otter-lantern@cloudmailin.net. */
+export function cloudmailinForwardedFixture(paragraphCount = 12): Record<string, any> {
+  return loadFixture('cloudmailin-forwarded.json', paragraphCount) as Record<string, any>;
+}
+
+function loadFixture(name: string, paragraphCount: number): unknown {
   const ps = paragraphs(paragraphCount);
-  const raw = readFileSync(new URL('./fixtures/postmark-forwarded-newsletter.json', import.meta.url), 'utf8');
+  const raw = readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8');
   return JSON.parse(
     raw
       .replace('__PARAGRAPHS__', ps.join('\\n\\n'))

@@ -23,9 +23,9 @@ npm workspaces monorepo. Run scripts from the root, or target one workspace with
 - Shared compiler options live in `tsconfig.base.json`; each workspace extends it.
 
 ## apps/api: backend, email capture
-- Stack: TypeScript (ESM, NodeNext), Hono on Node 22, Postgres (`pg`), Postmark inbound webhook, Mozilla Readability + jsdom, sanitize-html, zod.
+- Stack: TypeScript (ESM, NodeNext), Hono on Node 22, Postgres (`pg`), CloudMailin inbound webhook (Postmark adapter kept), Mozilla Readability + jsdom, sanitize-html, zod.
 - The job queue is a Postgres table claimed with `FOR UPDATE SKIP LOCKED`; there is no Redis.
-- Flow: `POST /webhooks/postmark/inbound` stores the email in `inbound_emails` and queues `process_email`. `process_email` turns it into article rows: each link gets a `fetch_article` job, and a long newsletter is saved directly. See `apps/api/README.md` for the full rules.
+- Flow: `POST /webhooks/cloudmailin/inbound` (or `/webhooks/postmark/inbound`) normalizes the payload and stores the email in `inbound_emails` and queues `process_email`. `process_email` turns it into article rows: each link gets a `fetch_article` job, and a long newsletter is saved directly. See `apps/api/README.md` for the full rules.
 - The decision logic lives in `src/inbound/plan.ts` and is pure, so it's tested without a database.
 
 ## Commands
@@ -43,7 +43,7 @@ All from the repo root:
 - Every outbound fetch goes through `src/fetch/safeFetch.ts` (SSRF guard). Never use bare `fetch` for user-supplied URLs.
 - Stored article HTML must go through `sanitizeArticleHtml`.
 - `sanitize-html` is pinned to 2.17.5 and `htmlparser2` is overridden to v10 in the root `package.json`: newer versions need the ESM-only htmlparser2 v12, which crashes on Vercel (`ERR_REQUIRE_ESM`). Don't bump either without deploying and checking `/health`.
-- The webhook returns 200 for anything ignored on purpose and 5xx only for real failures, which Postmark retries.
+- The webhook returns 200 for anything ignored on purpose and 5xx only for real failures, which the provider retries. Both webhooks use basic auth from `INBOUND_WEBHOOK_USER`/`INBOUND_WEBHOOK_PASSWORD`.
 - Schema changes are additive and idempotent (`if not exists`) until a migration tool is adopted.
 
 ## Hosting (decided)
@@ -55,7 +55,7 @@ All from the repo root:
 - `GET /brew` returns the signed-in user's saved articles as a PDF magazine (can take 5 to 30 s). The web app's Library page downloads it with the Brew button.
 
 ## Open decisions
-- Inbound provider: Postmark for now. The adapter is isolated in `src/inbound/postmark.ts`.
+- Inbound provider: CloudMailin (decided 2026-11-01: free, no domain needed; addresses are `<id>+{token}@cloudmailin.net`). Adapter in `src/inbound/cloudmailin.ts`; the Postmark adapter (`src/inbound/postmark.ts`) is kept as the alternative. Both feed one shared handler in `src/app.ts`.
 - `REQUIRE_KNOWN_SENDER` default: currently false, so the random address token is the secret.
 - Product name: Paperbrew (decided 2026-11-01). The domain is TBD.
 

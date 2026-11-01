@@ -1,6 +1,6 @@
-/** Provider-neutral shape of an email we received. Add adapters (Cloudflare, SES, Mailgun) that produce this. */
+/** Provider-neutral shape of an email we received. Adapters (postmark.ts, cloudmailin.ts) produce this. */
 export interface InboundEmail {
-  provider: 'postmark';
+  provider: 'postmark' | 'cloudmailin';
   providerMessageId: string;
   messageId: string | null;
   from: string; // lowercased address of the sender (the user, when forwarding)

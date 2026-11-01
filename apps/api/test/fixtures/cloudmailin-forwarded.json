@@ -1,0 +1,30 @@
+{
+  "headers": {
+    "return_path": "tomer@example.com",
+    "received": [
+      "by mx.cloudmailin.net with SMTP id 1a2b3c; Mon, 2 Nov 2026 06:14:02 +0000",
+      "by mail-wr1-f41.google.com with SMTP id x9so1234567wrb.1; Sun, 01 Nov 2026 22:14:01 -0800"
+    ],
+    "date": "Mon, 2 Nov 2026 08:14:00 +0200",
+    "from": "Tomer <Tomer@Example.com>",
+    "to": "4fcb639be7306607cef6+amber-otter-lantern@cloudmailin.net",
+    "message_id": "<CAF=abc@mail.gmail.com>",
+    "subject": "Fwd: The case for slow reading",
+    "mime_version": "1.0",
+    "content_type": "multipart/alternative; boundary=\"000000000000a1b2c3d4e5f6\"",
+    "dkim_signature": "v=1; a=rsa-sha256; c=relaxed/relaxed; d=example.com; s=20230601; h=to:subject:message-id:date:from:mime-version; bh=abc=; b=def="
+  },
+  "envelope": {
+    "to": "4fcb639be7306607cef6+amber-otter-lantern@cloudmailin.net",
+    "recipients": ["4fcb639be7306607cef6+amber-otter-lantern@cloudmailin.net"],
+    "from": "tomer@example.com",
+    "helo_domain": "mail-wr1-f41.google.com",
+    "remote_ip": "209.85.221.41",
+    "tls": true,
+    "spf": { "result": "pass", "domain": "example.com" }
+  },
+  "plain": "Save this one for the flight.\n\n---------- Forwarded message ---------\nFrom: Slow Notes <hello@slownotes.example>\nDate: Sun, Nov 1, 2026 at 9:00 AM\nSubject: The case for slow reading\nTo: <tomer@example.com>\n\n__PARAGRAPHS__\n\nUnsubscribe: https://slownotes.example/unsubscribe?u=1",
+  "html": "<div dir=\"ltr\">Save this one for the flight.<br><br><div class=\"gmail_quote\"><div dir=\"ltr\" class=\"gmail_attr\">---------- Forwarded message ---------<br>From: <strong>Slow Notes</strong> &lt;hello@slownotes.example&gt;<br>Date: Sun, Nov 1, 2026 at 9:00 AM<br>Subject: The case for slow reading<br></div><br><table><tr><td><h1>The case for slow reading</h1>__HTML_PARAGRAPHS__<p><a href=\"https://slownotes.example/unsubscribe?u=1\">Unsubscribe</a></p></td></tr></table></div></div>",
+  "reply_plain": "Save this one for the flight.",
+  "attachments": []
+}

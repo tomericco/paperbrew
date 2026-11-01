@@ -13,8 +13,9 @@ const Env = z.object({
   BETTER_AUTH_SECRET: z.string().min(32),
   // The web origin (sign-in runs on the web app's domain, proxied to /api/auth here).
   BETTER_AUTH_URL: z.string().url(),
-  POSTMARK_WEBHOOK_USER: z.string().min(1),
-  POSTMARK_WEBHOOK_PASSWORD: z.string().min(16),
+  // Basic auth for every inbound webhook (Postmark, CloudMailin): https://USER:PASSWORD@host/webhooks/...
+  INBOUND_WEBHOOK_USER: z.string().min(1),
+  INBOUND_WEBHOOK_PASSWORD: z.string().min(16),
   REQUIRE_KNOWN_SENDER: z
     .enum(['true', 'false'])
     .default('false')
