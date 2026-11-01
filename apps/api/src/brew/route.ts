@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { pool } from '../db/client.js';
 import { requireUser, type UserEnv } from '../routes/library.js';
+import { BusyError } from './lifecycle.js';
 import { htmlToPdf } from './pdf.js';
 import { renderMagazine } from './render.js';
 
@@ -28,7 +29,7 @@ brew.get('/brew', async (c) => {
   );
 
   const date = new Date();
-  let pdf: Uint8Array;
+  let pdf: ReadableStream<Uint8Array>;
   try {
     const html = renderMagazine({
       date,
@@ -43,12 +44,16 @@ brew.get('/brew', async (c) => {
     });
     pdf = await htmlToPdf(html);
   } catch (err) {
+    if (err instanceof BusyError) {
+      return c.json({ error: 'Another magazine is brewing. Try again in a minute.' }, 503);
+    }
     console.error('[brew] render failed', err);
     return c.json({ error: "Couldn't brew the magazine. Try again." }, 500);
   }
 
   const day = date.toISOString().slice(0, 10); // UTC
-  return c.body(pdf as Uint8Array<ArrayBuffer>, 200, {
+  // Streamed (no content-length), so Vercel's 4.5 MB response cap doesn't apply.
+  return c.body(pdf, 200, {
     'content-type': 'application/pdf',
     'content-disposition': `attachment; filename="paperbrew-${day}.pdf"`,
     'cache-control': 'private, no-store',

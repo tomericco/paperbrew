@@ -17,6 +17,17 @@ vi.mock('../src/db/client.js', () => ({ pool: { query } }));
 vi.mock('../src/brew/pdf.js', () => ({ htmlToPdf }));
 
 const { brew } = await import('../src/brew/route.js');
+const { BusyError } = await import('../src/brew/lifecycle.js');
+
+/** What htmlToPdf now returns: the PDF as a stream. */
+function pdfStream(bytes: number[]): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(bytes));
+      controller.close();
+    },
+  });
+}
 
 const ROW = {
   title: '<script>x</script>',
@@ -48,7 +59,7 @@ describe('GET /brew', () => {
 
   it("renders only the signed-in user's ready articles, oldest first", async () => {
     query.mockResolvedValue({ rows: [ROW] });
-    htmlToPdf.mockResolvedValue(new Uint8Array([37, 80, 68, 70]));
+    htmlToPdf.mockResolvedValue(pdfStream([37, 80, 68, 70]));
 
     const res = await brew.request('/brew', { headers: { 'x-test-user': 'yes' } });
 
@@ -56,6 +67,8 @@ describe('GET /brew', () => {
     expect(res.headers.get('content-type')).toBe('application/pdf');
     expect(res.headers.get('content-disposition')).toBe('attachment; filename="paperbrew-2026-11-01.pdf"');
     expect(res.headers.get('cache-control')).toBe('private, no-store');
+    // Streamed: no content-length, so Vercel's 4.5 MB response cap doesn't apply.
+    expect(res.headers.get('content-length')).toBeNull();
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([37, 80, 68, 70]));
 
     const [sql, params] = query.mock.calls[0];
@@ -71,7 +84,7 @@ describe('GET /brew', () => {
 
   it('brews an empty issue when there is nothing ready', async () => {
     query.mockResolvedValue({ rows: [] });
-    htmlToPdf.mockResolvedValue(new Uint8Array([1]));
+    htmlToPdf.mockResolvedValue(pdfStream([1]));
     const res = await brew.request('/brew', { headers: { 'x-test-user': 'yes' } });
     expect(res.status).toBe(200);
     expect(htmlToPdf.mock.calls[0][0]).toContain('Nothing to brew yet. Forward some articles first.');
@@ -84,5 +97,14 @@ describe('GET /brew', () => {
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: "Couldn't brew the magazine. Try again." });
     expect(console.error).toHaveBeenCalled();
+  });
+
+  it('answers 503 when another brew holds the browser for too long', async () => {
+    query.mockResolvedValue({ rows: [ROW] });
+    htmlToPdf.mockRejectedValue(new BusyError());
+    const res = await brew.request('/brew', { headers: { 'x-test-user': 'yes' } });
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'Another magazine is brewing. Try again in a minute.' });
+    expect(console.error).not.toHaveBeenCalled();
   });
 });
