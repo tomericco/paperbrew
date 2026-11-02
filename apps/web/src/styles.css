@@ -163,6 +163,11 @@ button:disabled {
   margin: 0 0 24px;
 }
 
+.hero .btn {
+  font-size: 16px;
+  padding: 9px 22px;
+}
+
 .footer .container {
   padding-top: 16px;
   padding-bottom: 16px;
