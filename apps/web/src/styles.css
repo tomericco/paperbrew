@@ -139,6 +139,30 @@ button:disabled {
   padding: 16px 0 48px;
 }
 
+.main-centered {
+  display: grid;
+  align-content: center;
+}
+
+.brand {
+  font-family: 'Fraunces', 'Source Serif 4', Georgia, serif;
+  font-weight: 600;
+  font-size: 24px;
+  letter-spacing: -0.01em;
+}
+
+/* Home */
+
+.hero {
+  max-width: 30rem;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.hero p {
+  margin: 0 0 24px;
+}
+
 .footer .container {
   padding-top: 16px;
   padding-bottom: 16px;

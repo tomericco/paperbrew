@@ -3,25 +3,19 @@ import { Layout } from '../Layout';
 
 export function Home() {
   const { data: session } = authClient.useSession();
-  const cta = session ? (
-    <a className="btn btn-primary" href="/app">
-      Open your library
-    </a>
-  ) : (
-    <a className="btn btn-primary" href="/signin">
-      Sign in
-    </a>
-  );
 
   return (
-    <Layout actions={cta}>
+    <Layout centered>
       <section className="hero">
         <h1>Read what you save, on paper.</h1>
         <p>
           Forward the articles you save from Hacker News, blogs and newsletters. Paperbrew turns them into a magazine
           you print at home.
         </p>
-        {cta}
+        {/* Signed-out visitors sign in first; the library shows their forwarding address. */}
+        <a className="btn btn-primary" href={session ? '/app' : '/signin'}>
+          Add articles
+        </a>
       </section>
     </Layout>
   );
