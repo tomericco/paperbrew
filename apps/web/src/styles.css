@@ -33,9 +33,9 @@ code {
 button,
 .btn {
   font: inherit;
-  font-size: 15px;
+  font-size: 13px;
   line-height: 1.2;
-  padding: 7px 16px;
+  padding: 4px 10px;
   border: 1px solid #111;
   border-radius: 4px;
   background: transparent;
@@ -76,19 +76,12 @@ button:disabled {
   border-color: #333;
 }
 
-.btn-small {
-  font-size: 13px;
-  padding: 4px 10px;
-}
-
 .btn-block {
   width: 100%;
 }
 
 .btn-quiet {
   border-color: transparent;
-  font-size: 14px;
-  padding: 4px 8px;
 }
 
 .btn-quiet:hover:not(:disabled) {
@@ -198,6 +191,7 @@ button:disabled {
 .page-head {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
 }
 

@@ -127,7 +127,7 @@ function LibraryContent({ name }: { name: string }) {
       {me && (
         <span className="row address-bar">
           <code className="address">{me.address}</code>
-          <button type="button" className="btn-small" onClick={() => copyAddress(me.address)}>
+          <button type="button" onClick={() => copyAddress(me.address)}>
             {copied ? 'Copied' : 'Copy'}
           </button>
         </span>
