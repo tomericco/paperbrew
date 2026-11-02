@@ -1,4 +1,4 @@
-/* Layout only: browser default fonts, colors and controls. */
+/* Layout, the serif typeface (the printed issue's Source Serif 4) and custom buttons. Colors stay default. */
 
 :root {
   --gutter: 24px;
@@ -11,6 +11,90 @@
 
 body {
   margin: 0;
+  font-family: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  font-size: 17px;
+  line-height: 1.5;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+code {
+  font-size: 14px;
+}
+
+/* Buttons: hairline outline, filled on hover. .btn styles links that act as buttons. */
+
+button,
+.btn {
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.2;
+  padding: 7px 16px;
+  border: 1px solid #111;
+  border-radius: 4px;
+  background: transparent;
+  color: #111;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  transition: background-color 120ms, color 120ms;
+}
+
+button:hover:not(:disabled),
+.btn:hover {
+  background: #111;
+  color: #fff;
+}
+
+button:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid #111;
+  outline-offset: 2px;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn-primary {
+  background: #111;
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #333;
+  border-color: #333;
+}
+
+.btn-small {
+  font-size: 13px;
+  padding: 4px 10px;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+.btn-quiet {
+  border-color: transparent;
+  font-size: 14px;
+  padding: 4px 8px;
+}
+
+.btn-quiet:hover:not(:disabled) {
+  background: transparent;
+  color: #111;
+  border-color: #111;
 }
 
 /* App shell: header, main, footer */

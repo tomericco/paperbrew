@@ -127,7 +127,7 @@ function LibraryContent({ name }: { name: string }) {
       {me && (
         <span className="row address-bar">
           <code className="address">{me.address}</code>
-          <button type="button" onClick={() => copyAddress(me.address)}>
+          <button type="button" className="btn-small" onClick={() => copyAddress(me.address)}>
             {copied ? 'Copied' : 'Copy'}
           </button>
         </span>
@@ -148,7 +148,7 @@ function LibraryContent({ name }: { name: string }) {
         <section className="span-12">
           <div className="page-head">
             <h1>Your library</h1>
-            <button type="button" onClick={brew} disabled={brewing || articles.length === 0}>
+            <button type="button" className="btn-primary" onClick={brew} disabled={brewing || articles.length === 0}>
               {brewing ? 'Brewing…' : 'Brew'}
             </button>
           </div>
@@ -173,7 +173,7 @@ function LibraryContent({ name }: { name: string }) {
                     )}
                     <div className="muted small">{articleMeta(article)}</div>
                   </div>
-                  <button type="button" onClick={() => remove(article.id)}>
+                  <button type="button" className="btn-quiet" onClick={() => remove(article.id)}>
                     Remove
                   </button>
                 </li>
