@@ -147,7 +147,7 @@ function LibraryContent({ name }: { name: string }) {
       <div className="grid">
         <section className="span-12">
           <div className="page-head">
-            <h1>Your library</h1>
+            <h1>Saved articles</h1>
             <button type="button" className="btn-primary" onClick={brew} disabled={brewing || articles.length === 0}>
               {brewing ? 'Brewing…' : 'Brew'}
             </button>
@@ -171,7 +171,7 @@ function LibraryContent({ name }: { name: string }) {
                     ) : (
                       <span className="title">{article.title ?? 'Untitled'}</span>
                     )}
-                    <div className="muted small">{articleMeta(article)}</div>
+                    <span className="meta">{articleMeta(article)}</span>
                   </div>
                   <button type="button" className="btn-quiet" onClick={() => remove(article.id)}>
                     Remove
