@@ -40,9 +40,7 @@ function LibraryContent({ name }: { name: string }) {
   const [articles, setArticles] = useState<Article[] | null>(null);
   const [loadError, setLoadError] = useState('');
 
-  const [editing, setEditing] = useState(false);
-  const [token, setToken] = useState('');
-  const [addressMessage, setAddressMessage] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const [brewing, setBrewing] = useState(false);
   const [brewError, setBrewError] = useState('');
@@ -60,7 +58,6 @@ function LibraryContent({ name }: { name: string }) {
         const articlesBody = (await articlesRes.json()) as { articles: Article[] };
         if (cancelled) return;
         setMe(meBody);
-        setToken(meBody.token);
         setArticles(articlesBody.articles);
       })
       .catch((err: unknown) => {
@@ -70,28 +67,6 @@ function LibraryContent({ name }: { name: string }) {
       cancelled = true;
     };
   }, []);
-
-  async function saveAddress() {
-    setAddressMessage('');
-    try {
-      const res = await fetch('/api/me/address', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ token }),
-      });
-      if (!res.ok) {
-        setAddressMessage(await errorText(res, 'Could not change the address.'));
-        return;
-      }
-      const body = (await res.json()) as { address: string; token: string };
-      setMe((prev) => (prev ? { ...prev, address: body.address, token: body.token } : prev));
-      setToken(body.token);
-      setEditing(false);
-      setAddressMessage(`Address changed to ${body.address}`);
-    } catch {
-      setAddressMessage('Could not change the address.');
-    }
-  }
 
   async function brew() {
     setBrewing(true);
@@ -135,10 +110,30 @@ function LibraryContent({ name }: { name: string }) {
     }
   }
 
+  async function copyAddress(address: string) {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard blocked: select the address so Cmd/Ctrl+C copies it.
+      const el = document.querySelector('.address');
+      if (el) getSelection()?.selectAllChildren(el);
+    }
+  }
+
   const header = (
     <>
+      {me && (
+        <span className="row address-bar">
+          <code className="address">{me.address}</code>
+          <button type="button" onClick={() => copyAddress(me.address)}>
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        </span>
+      )}
       <span className="who">{name}</span>
-      <button type="button" className="btn" onClick={signOut}>
+      <button type="button" onClick={signOut}>
         Sign out
       </button>
     </>
@@ -150,68 +145,20 @@ function LibraryContent({ name }: { name: string }) {
   else
     content = (
       <div className="grid">
-        <aside className="span-4 stack">
-          <section className="card">
-            <h2>Your address</h2>
-            <p className="muted small">Forward articles and newsletters here.</p>
-            <code className="address">{me.address}</code>
-            {editing ? (
-              <div className="row">
-                <input
-                  className="input"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  aria-label="Address name"
-                />
-                <button type="button" className="btn" onClick={saveAddress}>
-                  Save
-                </button>
-              </div>
-            ) : (
-              <div className="row">
-                <button type="button" className="btn" onClick={() => navigator.clipboard?.writeText(me.address)}>
-                  Copy
-                </button>
-                <button type="button" className="btn" onClick={() => setEditing(true)}>
-                  Change
-                </button>
-              </div>
-            )}
-            {addressMessage && (
-              <p className="message" role="status">
-                {addressMessage}
-              </p>
-            )}
-          </section>
-
-          <section className="card">
-            <h2>Brew an issue</h2>
-            <p className="muted small">Download every saved article as a print-ready PDF magazine.</p>
-            <button
-              type="button"
-              className="btn btn-primary btn-block"
-              onClick={brew}
-              disabled={brewing || articles.length === 0}
-            >
-              {brewing ? 'Brewing…' : 'Brew'}
-            </button>
-            {brewError && (
-              <p className="error" role="alert">
-                {brewError}
-              </p>
-            )}
-          </section>
-        </aside>
-
-        <section className="span-8">
+        <section className="span-12">
           <div className="page-head">
             <h1>Your library</h1>
-            <span className="muted">
-              {articles.length} {articles.length === 1 ? 'article' : 'articles'}
-            </span>
+            <button type="button" onClick={brew} disabled={brewing || articles.length === 0}>
+              {brewing ? 'Brewing…' : 'Brew'}
+            </button>
           </div>
+          {brewError && (
+            <p className="error" role="alert">
+              {brewError}
+            </p>
+          )}
           {articles.length === 0 ? (
-            <div className="card empty muted">No articles yet. Forward an email with a link to your address.</div>
+            <p className="empty muted">No articles yet. Forward an email with a link to the address above.</p>
           ) : (
             <ul className="list">
               {articles.map((article) => (
@@ -226,7 +173,7 @@ function LibraryContent({ name }: { name: string }) {
                     )}
                     <div className="muted small">{articleMeta(article)}</div>
                   </div>
-                  <button type="button" className="btn btn-quiet" onClick={() => remove(article.id)}>
+                  <button type="button" onClick={() => remove(article.id)}>
                     Remove
                   </button>
                 </li>
