@@ -3,7 +3,9 @@ import { pool } from '../db/client.js';
 import { requireUser, type UserEnv } from '../routes/library.js';
 import { BusyError } from './lifecycle.js';
 import { htmlToPdf } from './pdf.js';
-import { renderMagazine } from './render.js';
+import { imposeBooklet } from './booklet.js';
+import type { PaperLayout } from './layout.js';
+import { magazineDirection, renderMagazine, type BrewArticle } from './render.js';
 
 const MAX_ARTICLES = 50;
 
@@ -28,21 +30,36 @@ brew.get('/brew', async (c) => {
     [c.get('userId')],
   );
 
+  const { rows: users } = await pool.query<{ paper_layout: string | null }>(
+    'select paper_layout from users where id = $1',
+    [c.get('userId')],
+  );
+  const layout: PaperLayout = users[0]?.paper_layout === 'booklet' ? 'booklet' : 'flat';
+
+  const articles: BrewArticle[] = rows.map((r) => ({
+    title: r.title,
+    author: r.author,
+    siteName: r.site_name,
+    sourceUrl: r.source_url,
+    readingMinutes: r.reading_minutes,
+    contentHtml: r.content_html,
+  }));
+
   const date = new Date();
   let pdf: ReadableStream<Uint8Array>;
   try {
-    const html = renderMagazine({
-      date,
-      articles: rows.map((r) => ({
-        title: r.title,
-        author: r.author,
-        siteName: r.site_name,
-        sourceUrl: r.source_url,
-        readingMinutes: r.reading_minutes,
-        contentHtml: r.content_html,
-      })),
-    });
-    pdf = await htmlToPdf(html);
+    pdf = await htmlToPdf(renderMagazine({ date, articles, layout }));
+    if (layout === 'booklet') {
+      // Read to the end: that is what releases the browser slot.
+      const a5 = new Uint8Array(await new Response(pdf).arrayBuffer());
+      const sheets = await imposeBooklet(a5, magazineDirection(articles));
+      pdf = new ReadableStream({
+        start(controller) {
+          controller.enqueue(sheets);
+          controller.close();
+        },
+      });
+    }
   } catch (err) {
     if (err instanceof BusyError) {
       return c.json({ error: 'Another magazine is brewing. Try again in a minute.' }, 503);
@@ -55,7 +72,7 @@ brew.get('/brew', async (c) => {
   // Streamed (no content-length), so Vercel's 4.5 MB response cap doesn't apply.
   return c.body(pdf, 200, {
     'content-type': 'application/pdf',
-    'content-disposition': `attachment; filename="paperbrew-${day}.pdf"`,
+    'content-disposition': `attachment; filename="paperbrew-${day}${layout === 'booklet' ? '-booklet' : ''}.pdf"`,
     'cache-control': 'private, no-store',
   });
 });
