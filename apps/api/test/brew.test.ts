@@ -107,8 +107,38 @@ describe('renderMagazine', () => {
 
   it('numbers every page in the footer except the cover', () => {
     const html = renderMagazine({ articles: [first], date: DATE });
-    expect(html).toMatch(/@bottom-center\s*\{[^}]*content:\s*counter\(page\)/);
-    expect(html).toMatch(/@page\s*:first\s*\{\s*@bottom-center\s*\{\s*content:\s*none/);
+    expect(html).toMatch(/@bottom-right\s*\{[^}]*content:\s*counter\(page\)/);
+    expect(html).toMatch(/@page\s*:first\s*\{\s*@bottom-right\s*\{\s*content:\s*none/);
+    expect(html).not.toContain('@bottom-center');
+  });
+
+  it("puts each article's title bottom left and the page number bottom right", () => {
+    const html = renderMagazine({ articles: [first, second], date: DATE });
+    expect(html).toMatch(/\.article:nth-of-type\(1\)\s*\{\s*page:\s*piece-1;/);
+    expect(html).toMatch(/\.article:nth-of-type\(2\)\s*\{\s*page:\s*piece-2;/);
+    const one = after(html, '@page piece-1');
+    expect(one).toMatch(/^@page piece-1\s*\{\s*@bottom-left\s*\{\s*content:\s*"Choose Boring Technology";/);
+    expect(one).toMatch(/@bottom-right\s*\{\s*content:\s*counter\(page\);/);
+    expect(after(html, '@page piece-2')).toMatch(/content:\s*"The Bitter Lesson";/);
+  });
+
+  it('draws a thin line across the top of the footer on both halves', () => {
+    const html = renderMagazine({ articles: [first], date: DATE });
+    const rule = after(html, '@page piece-1');
+    expect(rule).toMatch(/@bottom-left\s*\{[^}]*border-top:\s*0\.5pt solid #111;/);
+    expect(rule).toMatch(/@bottom-right\s*\{[^}]*border-top:\s*0\.5pt solid #111;/);
+  });
+
+  it('escapes footer titles inside the stylesheet', () => {
+    const html = renderMagazine({ articles: [article({ title: 'Say "hi" \\ </style><b>x' })], date: DATE });
+    expect(html).toContain('content: "Say \\22 hi\\22  \\5c  \\3c /style\\3e \\3c b\\3e x";');
+    expect(html.match(/<\/style>/g)).toHaveLength(1);
+  });
+
+  it('shortens long footer titles with an ellipsis, more for the booklet', () => {
+    const long = article({ title: 'A'.repeat(100) });
+    expect(renderMagazine({ articles: [long], date: DATE })).toContain(`content: "${'A'.repeat(59)}…";`);
+    expect(renderMagazine({ articles: [long], date: DATE, layout: 'booklet' })).toContain(`content: "${'A'.repeat(41)}…";`);
   });
 
   it('sets article bodies in a single column', () => {
@@ -135,7 +165,7 @@ describe('renderMagazine', () => {
   it('lists up to three titles on the cover and counts the rest', () => {
     const many = ['One', 'Two', 'Three', 'Four', 'Five'].map((t) => article({ title: t }));
     const html = renderMagazine({ articles: many, date: DATE });
-    const cover = html.slice(0, html.indexOf('class="article"'));
+    const cover = html.slice(html.indexOf('<section class="cover">'), html.indexOf('class="article"'));
     expect(cover).toContain('One');
     expect(cover).toContain('Three');
     expect(cover).not.toContain('Four');
@@ -200,6 +230,14 @@ describe('booklet layout and right-to-left', () => {
     expect(html).toContain('<article class="article" dir="rtl" lang="he">');
     expect(html).toContain('<article class="article">');
     expect(html).toContain('<span class="a" dir="auto">מחבר</span>');
+  });
+
+  it('mirrors the footer for right-to-left articles: number bottom left, title bottom right', () => {
+    const html = renderMagazine({ articles: [first, hebrew], date: DATE });
+    expect(after(html, '@page piece-1')).toMatch(/^@page piece-1\s*\{\s*@bottom-left\s*\{\s*content:\s*"Choose/);
+    const two = after(html, '@page piece-2');
+    expect(two).toMatch(/^@page piece-2\s*\{\s*@bottom-left\s*\{\s*content:\s*counter\(page\);/);
+    expect(two).toMatch(/@bottom-right\s*\{\s*content:\s*"כותרת בעברית";[^}]*direction:\s*rtl/);
   });
 
   it('marks Arabic articles lang ar and turns off their drop cap', () => {
