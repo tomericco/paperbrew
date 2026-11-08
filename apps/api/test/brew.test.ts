@@ -105,6 +105,12 @@ describe('renderMagazine', () => {
     expect(html).toMatch(/@page\s*\{[^}]*size:\s*A4/);
   });
 
+  it('numbers every page in the footer except the cover', () => {
+    const html = renderMagazine({ articles: [first], date: DATE });
+    expect(html).toMatch(/@bottom-center\s*\{[^}]*content:\s*counter\(page\)/);
+    expect(html).toMatch(/@page\s*:first\s*\{\s*@bottom-center\s*\{\s*content:\s*none/);
+  });
+
   it('sets article bodies in a single column', () => {
     const html = renderMagazine({ articles: [first], date: DATE });
     expect(html).not.toMatch(/column-count/);
