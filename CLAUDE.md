@@ -53,6 +53,7 @@ All from the repo root:
 ## Auth and brew
 - Auth: Better Auth at `/api/auth` (Google, GitHub, Reddit; a provider is enabled only when both its `*_CLIENT_ID` and `*_CLIENT_SECRET` are set). Env: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` (the web origin) and `INBOUND_ADDRESS`. OAuth callbacks are `${BETTER_AUTH_URL}/api/auth/callback/<provider>`.
 - `GET /brew` returns the signed-in user's saved articles as a PDF magazine (can take 5 to 30 s). The web app's Library page downloads it with the Brew button.
+- Brew has two layouts, stored per user as `paper_layout`: `flat` (default, A4 pages) and `booklet` (A5 pages imposed two-up on A4 landscape sheets, printed two-sided and folded; it binds right when every article is Hebrew or Arabic, otherwise left). `PUT /me/settings` with `{ "paperLayout": "flat" | "booklet" }` sets the layout and `GET /brew` uses it.
 
 ## Open decisions
 - Inbound provider: CloudMailin (decided 2026-11-01: free, no domain needed; addresses are `<id>+{token}@cloudmailin.net`). Adapter in `src/inbound/cloudmailin.ts`; the Postmark adapter (`src/inbound/postmark.ts`) is kept as the alternative. Both feed one shared handler in `src/app.ts`.
@@ -64,4 +65,4 @@ All from the repo root:
 2. Web paste-a-link endpoint, reusing `fetch_article` with `added_via = 'web'`.
 3. ~~Articles API~~ done: list, remove, and address change. Rename is still to do.
 4. Confirmation reply email ("Saved 2 articles"), and a reply on failure.
-5. Magazine model plus print/PDF rendering. `GET /brew` already renders all saved articles to a PDF; booklet imposition for A4 is still to do.
+5. Magazine model plus print/PDF rendering. `GET /brew` already renders all saved articles to a PDF, flat or as an imposed A4 booklet (done); the magazine model (reorder, rename, looks, optional pages) is still to do.
