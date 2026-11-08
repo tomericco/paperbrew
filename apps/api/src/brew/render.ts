@@ -159,19 +159,52 @@ function article(p: Piece): string {
   </article>`;
 }
 
-/** The page box. Both layouts number their pages in the bottom margin. */
+const FOOTER_TYPE =
+  "font-family: 'IBM Plex Mono', 'Frank Ruhl Libre', 'Noto Naskh Arabic', ui-monospace, Menlo, monospace; font-size: 8pt; letter-spacing: 0.04em; color: #111;";
+
+/** A hairline across the top of the footer. Both halves carry it, so it runs the full text width. */
+const FOOTER_LINE = 'border-top: 0.5pt solid #111; margin-top: 5mm; padding-top: 2mm; vertical-align: top;';
+
+/** The page box. Both layouts number their pages bottom right (CSS margin boxes, Chrome 131+). The cover counts as page 1 but shows none. */
 function pageRule(size: string, margin: string): string {
   return `
 @page {
   size: ${size}; margin: ${margin};
-  /* Page numbers in the bottom margin (CSS margin boxes, Chrome 131+). The cover counts as page 1 but shows none. */
-  @bottom-center {
-    content: counter(page);
-    font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 8pt; letter-spacing: 0.04em; color: #111;
-  }
+  @bottom-right { content: counter(page); ${FOOTER_TYPE} }
 }
-@page :first { @bottom-center { content: none; } }
+@page :first { @bottom-right { content: none; } }
 `;
+}
+
+/** A CSS string literal. Quotes, backslashes and angle brackets become hex escapes, so a title can't end the string or the style element. */
+function cssString(s: string): string {
+  const escaped = s
+    .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/[\\"<>&]/g, (c) => `\\${c.charCodeAt(0).toString(16)} `);
+  return `"${escaped}"`;
+}
+
+/** Cuts a title to `max` characters (code points), ending with an ellipsis when cut. */
+function shorten(s: string, max: number): string {
+  const chars = Array.from(s);
+  return chars.length <= max ? s : `${chars.slice(0, max - 1).join('').trimEnd()}…`;
+}
+
+/**
+ * A minimal running footer per article, through a named page: the title on the inside of the reading direction,
+ * the page number on the outside. Left-to-right puts the title bottom left and the number bottom right; right-to-left mirrors it.
+ */
+function footerRule(p: Piece, index: number, maxTitle: number): string {
+  const rtl = directionOf(p.script) === 'rtl';
+  const name = `piece-${index + 1}`;
+  const title = `content: ${cssString(shorten(p.title, maxTitle))}; ${FOOTER_TYPE} text-transform: none;${rtl ? ' direction: rtl; letter-spacing: 0;' : ''}`;
+  const number = `content: counter(page); ${FOOTER_TYPE}`;
+  const [left, right] = rtl ? [number, title] : [title, number];
+  return `.article:nth-of-type(${index + 1}) { page: ${name}; }
+@page ${name} {
+  @bottom-left { ${left} ${FOOTER_LINE} }
+  @bottom-right { ${right} ${FOOTER_LINE} }
+}`;
 }
 
 const CSS = `
@@ -252,8 +285,10 @@ const BOOKLET_PAGE = pageRule('A5', '14mm 16mm 16mm');
 
 export function renderMagazine(input: { articles: BrewArticle[]; date: Date; layout?: PaperLayout }): string {
   const booklet = input.layout === 'booklet';
-  const css = booklet ? BOOKLET_PAGE + CSS + BOOKLET_CSS : FLAT_PAGE + CSS;
   const pieces = toPieces(input.articles);
+  // Footer titles stop well short of the page number: about 60 characters fit the A4 text width, 42 the A5.
+  const footers = pieces.map((p, i) => footerRule(p, i, booklet ? 42 : 60)).join('\n');
+  const css = (booklet ? BOOKLET_PAGE + CSS + BOOKLET_CSS : FLAT_PAGE + CSS) + footers;
   const title = `Paperbrew · ${formatIssueDate(input.date)}`;
   return `<!doctype html>
 <html lang="en">
