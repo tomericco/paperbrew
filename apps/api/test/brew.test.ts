@@ -199,6 +199,7 @@ describe('booklet layout and right-to-left', () => {
     const html = renderMagazine({ articles: [hebrew, first], date: DATE });
     expect(html).toContain('<article class="article" dir="rtl" lang="he">');
     expect(html).toContain('<article class="article">');
+    expect(html).toContain('<span class="a" dir="auto">מחבר</span>');
   });
 
   it('marks Arabic articles lang ar and turns off their drop cap', () => {

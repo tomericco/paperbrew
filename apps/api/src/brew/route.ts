@@ -51,6 +51,7 @@ brew.get('/brew', async (c) => {
     pdf = await htmlToPdf(renderMagazine({ date, articles, layout }));
     if (layout === 'booklet') {
       // Read to the end: that is what releases the browser slot.
+      // Imposition runs after the htmlToPdf stream is drained (slot already released) on purpose: keeps Chromium's slot short; it is ~1 s of CPU.
       const a5 = new Uint8Array(await new Response(pdf).arrayBuffer());
       const sheets = await imposeBooklet(a5, magazineDirection(articles));
       pdf = new ReadableStream({
