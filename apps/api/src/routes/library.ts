@@ -3,6 +3,7 @@ import { createMiddleware } from 'hono/factory';
 import { z } from 'zod';
 import { auth } from '../auth/auth.js';
 import { provisionUser } from '../auth/provision.js';
+import { PAPER_LAYOUTS, type PaperLayout } from '../brew/layout.js';
 import { config } from '../config.js';
 import { isUniqueViolation, pool } from '../db/client.js';
 import { formatAddress, normalizeToken } from '../inbound/address.js';
@@ -47,8 +48,8 @@ const addressOf = (token: string) => ({ address: formatAddress(config.INBOUND_AD
 
 library.get('/me', async (c) => {
   const userId = c.get('userId');
-  const { rows } = await pool.query<{ token: string; email: string | null }>(
-    `select a.token, u.email
+  const { rows } = await pool.query<{ token: string; email: string | null; paper_layout: PaperLayout }>(
+    `select a.token, u.email, u.paper_layout
      from users u join inbound_addresses a on a.user_id = u.id and a.disabled_at is null
      where u.id = $1
      order by a.created_at desc
@@ -57,7 +58,7 @@ library.get('/me', async (c) => {
   );
   const row = rows[0];
   if (!row) return c.json({ error: 'no active address' }, 500);
-  return c.json({ ...addressOf(row.token), email: row.email });
+  return c.json({ ...addressOf(row.token), email: row.email, paperLayout: row.paper_layout });
 });
 
 const AddressBody = z.object({ token: z.string() });
@@ -107,6 +108,15 @@ library.put('/me/address', async (c) => {
   } finally {
     client.release();
   }
+});
+
+const SettingsBody = z.object({ paperLayout: z.enum(PAPER_LAYOUTS) });
+
+library.put('/me/settings', async (c) => {
+  const body = SettingsBody.safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: 'paperLayout must be flat or booklet' }, 400);
+  await pool.query('update users set paper_layout = $1 where id = $2', [body.data.paperLayout, c.get('userId')]);
+  return c.json({ paperLayout: body.data.paperLayout });
 });
 
 library.get('/articles', async (c) => {

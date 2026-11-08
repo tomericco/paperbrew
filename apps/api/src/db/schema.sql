@@ -12,6 +12,9 @@ create table if not exists users (
 -- provider gives none (Reddit), so it's only a contact hint, not an identity.
 alter table users alter column email drop not null;
 alter table users add column if not exists auth_user_id text unique;
+alter table users add column if not exists paper_layout text not null default 'flat';
+alter table users drop constraint if exists users_paper_layout_check;
+alter table users add constraint users_paper_layout_check check (paper_layout in ('flat', 'booklet'));
 
 -- Each user gets a mailbox token (three random words, e.g. amber-otter-lantern),
 -- delivered to INBOUND_ADDRESS with {token} filled in.
