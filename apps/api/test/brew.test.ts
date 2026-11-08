@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderMagazine, type BrewArticle } from '../src/brew/render.js';
+import { magazineDirection, renderMagazine, type BrewArticle } from '../src/brew/render.js';
 
 const DATE = new Date('2026-11-01T12:00:00Z');
 
@@ -167,5 +167,77 @@ describe('renderMagazine', () => {
     expect(html).not.toContain('null');
     expect(html).not.toContain('undefined');
     expect(html).not.toContain('Read it online');
+  });
+});
+
+const hebrew = article({
+  title: 'כותרת בעברית',
+  author: 'מחבר',
+  contentHtml: '<p>זהו גוף המאמר בעברית עם מספיק מילים כדי לזהות את הכתב.</p>',
+});
+const arabic = article({
+  title: 'عنوان',
+  contentHtml: '<p>هذا نص المقال باللغة العربية مع كلمات كافية لتحديد الكتابة.</p>',
+});
+
+describe('booklet layout and right-to-left', () => {
+  it('flat layout keeps the A4 page', () => {
+    const html = renderMagazine({ articles: [first], date: DATE });
+    expect(html).toMatch(/size:\s*A4/);
+    expect(html).not.toMatch(/size:\s*A5/);
+  });
+
+  it('booklet layout sets an A5 page with the booklet sizes', () => {
+    const html = renderMagazine({ articles: [first], date: DATE, layout: 'booklet' });
+    expect(html).toMatch(/size:\s*A5;\s*margin:\s*14mm 16mm 16mm/);
+    expect(html).toMatch(/\.cover\s*\{[^}]*height:\s*180mm/);
+    expect(html).toContain('counter(page)');
+    expect(html).not.toMatch(/size:\s*A4/);
+  });
+
+  it('marks Hebrew articles rtl with lang he, Latin ones without dir', () => {
+    const html = renderMagazine({ articles: [hebrew, first], date: DATE });
+    expect(html).toContain('<article class="article" dir="rtl" lang="he">');
+    expect(html).toContain('<article class="article">');
+  });
+
+  it('marks Arabic articles lang ar and turns off their drop cap', () => {
+    const html = renderMagazine({ articles: [arabic], date: DATE });
+    expect(html).toContain('lang="ar"');
+    expect(html).toMatch(/\.article:lang\(ar\)\s*\.body > p:first-of-type::first-letter\s*\{[^}]*float:\s*none/);
+  });
+
+  it('isolates the English kicker and keeps the source link ltr', () => {
+    const html = renderMagazine({ articles: [hebrew], date: DATE });
+    expect(html).toContain('<bdi>01</bdi> · <bdi>mcfunley.com</bdi> · <bdi>9 min read</bdi>');
+    expect(html).toContain('<p class="source mono" dir="ltr">');
+    const latin = renderMagazine({ articles: [first], date: DATE });
+    expect(latin).not.toContain('<bdi>');
+    expect(latin).toContain('<p class="source mono">');
+  });
+
+  it('uses logical properties so rtl mirrors', () => {
+    const html = renderMagazine({ articles: [first], date: DATE });
+    expect(html).toContain('float: inline-start');
+    expect(html).toContain('border-inline-start');
+    expect(html).toContain('padding-inline-start');
+    expect(html).not.toContain('text-align: left');
+    expect(html).not.toContain('float: left');
+    expect(html).not.toContain('border-left');
+    expect(html).not.toContain('padding-left');
+  });
+
+  it('loads Hebrew and Arabic fonts', () => {
+    const html = renderMagazine({ articles: [first], date: DATE });
+    expect(html).toContain('Frank+Ruhl+Libre');
+    expect(html).toContain('Noto+Naskh+Arabic');
+    expect(html).toContain("'Source Serif 4', 'Frank Ruhl Libre', 'Noto Naskh Arabic'");
+  });
+
+  it('magazineDirection', () => {
+    expect(magazineDirection([hebrew, hebrew])).toBe('rtl');
+    expect(magazineDirection([hebrew, first])).toBe('ltr');
+    expect(magazineDirection([])).toBe('ltr');
+    expect(magazineDirection([article({ contentHtml: null }), hebrew])).toBe('rtl');
   });
 });

@@ -4,6 +4,9 @@
 // Typography and structure follow docs/design/the-issue (Cover, ArticleOpener), set in one column.
 // The design's Contents page is left out.
 
+import type { PaperLayout } from './layout.js';
+import { detectScript, directionOf, issueDirection, type Direction, type Script } from './direction.js';
+
 export type BrewArticle = {
   title: string | null;
   author: string | null;
@@ -16,7 +19,8 @@ export type BrewArticle = {
 
 const FONTS =
   'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500' +
-  '&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,600&display=block';
+  '&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,600' +
+  '&family=Frank+Ruhl+Libre:wght@400;700&family=Noto+Naskh+Arabic:wght@400;700&display=block';
 
 const COVER_TITLES = 3;
 const EMPTY_LINE = 'Nothing to brew yet. Forward some articles first.';
@@ -57,6 +61,7 @@ type Piece = {
   minutes: number | null;
   url: string | null;
   body: string;
+  script: Script;
 };
 
 const clean = (s: string | null): string | null => (s && s.trim() ? s.trim() : null);
@@ -84,8 +89,14 @@ function toPieces(articles: BrewArticle[]): Piece[] {
         minutes: a.readingMinutes && a.readingMinutes > 0 ? a.readingMinutes : null,
         url: url ? (a.sourceUrl as string).trim() : null,
         body: a.contentHtml as string,
+        script: detectScript(a.contentHtml as string),
       };
     });
+}
+
+/** The issue reads right to left only when every article does. Empty articles are skipped, as in the render. */
+export function magazineDirection(articles: BrewArticle[]): Direction {
+  return issueDirection(toPieces(articles).map((p) => p.script));
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -100,7 +111,7 @@ function cover(pieces: Piece[], date: Date): string {
         ${shown
           .map(
             (p) => `<div class="cover-title">
-          <span class="t">${escapeHtml(p.title)}</span>${p.author ? `<span class="a">${escapeHtml(p.author)}</span>` : ''}
+          <span class="t" dir="auto">${escapeHtml(p.title)}</span>${p.author ? `<span class="a">${escapeHtml(p.author)}</span>` : ''}
         </div>`,
           )
           .join('\n')}
@@ -125,15 +136,20 @@ function cover(pieces: Piece[], date: Date): string {
 }
 
 function article(p: Piece): string {
+  const rtl = directionOf(p.script) === 'rtl';
+  // In a right-to-left article the English kicker parts are isolated so the separators do not reorder.
+  const wrap = (s: string) => (rtl ? `<bdi>${s}</bdi>` : s);
   const kicker = [p.number, p.site && escapeHtml(p.site), p.minutes && `${p.minutes} min read`]
     .filter(Boolean)
+    .map((part) => wrap(part as string))
     .join(' · ');
+  const attrs = rtl ? ` dir="rtl" lang="${p.script === 'hebrew' ? 'he' : 'ar'}"` : '';
   const link = p.url
-    ? `<p class="source mono">Read it online: <a href="${escapeHtml(p.url)}">${escapeHtml(
+    ? `<p class="source mono"${rtl ? ' dir="ltr"' : ''}>Read it online: <a href="${escapeHtml(p.url)}">${escapeHtml(
         p.url.replace(/^https?:\/\//, ''),
       )}</a></p>`
     : '';
-  return `<article class="article">
+  return `<article class="article"${attrs}>
     <p class="kicker mono">${kicker}</p>
     <h1 class="headline">${escapeHtml(p.title)}</h1>
     ${p.author ? `<p class="byline">${escapeHtml(p.author)}</p>` : ''}
@@ -143,9 +159,11 @@ function article(p: Piece): string {
   </article>`;
 }
 
-const CSS = `
+/** The page box. Both layouts number their pages in the bottom margin. */
+function pageRule(size: string, margin: string): string {
+  return `
 @page {
-  size: A4; margin: 16mm 30mm;
+  size: ${size}; margin: ${margin};
   /* Page numbers in the bottom margin (CSS margin boxes, Chrome 131+). The cover counts as page 1 but shows none. */
   @bottom-center {
     content: counter(page);
@@ -153,9 +171,13 @@ const CSS = `
   }
 }
 @page :first { @bottom-center { content: none; } }
+`;
+}
+
+const CSS = `
 * { box-sizing: border-box; }
 html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-body { margin: 0; background: #fff; color: #111; font-family: 'Source Serif 4', Georgia, serif; }
+body { margin: 0; background: #fff; color: #111; font-family: 'Source Serif 4', 'Frank Ruhl Libre', 'Noto Naskh Arabic', Georgia, serif; }
 .mono { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
 .rule { height: 0; border-top: 1px solid #111; }
 .rule.thick { border-top-width: 3px; }
@@ -190,20 +212,24 @@ body { margin: 0; background: #fff; color: #111; font-family: 'Source Serif 4', 
 .body > :first-child { margin-top: 0; }
 .body p { margin: 0 0 0.6em; orphans: 2; widows: 2; }
 .body > p:first-of-type::first-letter {
-  float: left; font-size: 3.6em; line-height: 0.82; font-weight: 700; padding: 0.06em 0.08em 0 0;
+  float: inline-start; font-size: 3.6em; line-height: 0.82; font-weight: 700; padding-block-start: 0.06em; padding-inline-end: 0.08em;
+}
+/* Arabic letters join, so a detached initial would break the word. */
+.article:lang(ar) .body > p:first-of-type::first-letter {
+  float: none; font-size: inherit; line-height: inherit; font-weight: inherit; padding: 0;
 }
 .body h2, .body h3, .body h4, .body h5, .body h6 {
-  text-align: left; line-height: 1.2; margin: 1em 0 0.4em; break-inside: avoid; break-after: avoid;
+  text-align: start; line-height: 1.2; margin: 1em 0 0.4em; break-inside: avoid; break-after: avoid;
 }
 .body h2 { font-size: 13pt; } .body h3 { font-size: 10.75pt; } .body h4, .body h5, .body h6 { font-size: 10.5pt; }
 .body img { display: block; max-width: 100%; height: auto; margin: 0.4em 0; break-inside: avoid; }
 .body figure { margin: 0.6em 0; break-inside: avoid; }
-.body figcaption { font-size: 8.5pt; line-height: 1.3; color: #4a4a4a; text-align: left; }
-.body blockquote { margin: 0.6em 0; padding-left: 0.8em; border-left: 1.5pt solid #111; font-style: italic; }
-.body ul, .body ol { margin: 0 0 0.6em; padding-left: 1.2em; text-align: left; }
-.body pre { white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; font-size: 8pt; line-height: 1.35; }
+.body figcaption { font-size: 8.5pt; line-height: 1.3; color: #4a4a4a; text-align: start; }
+.body blockquote { margin: 0.6em 0; padding-inline-start: 0.8em; border-inline-start: 1.5pt solid #111; font-style: italic; }
+.body ul, .body ol { margin: 0 0 0.6em; padding-inline-start: 1.2em; text-align: start; }
+.body pre { white-space: pre-wrap; overflow-wrap: anywhere; text-align: start; font-size: 8pt; line-height: 1.35; }
 .body code { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 0.85em; }
-.body table { width: 100%; border-collapse: collapse; font-size: 8.5pt; text-align: left; break-inside: avoid; }
+.body table { width: 100%; border-collapse: collapse; font-size: 8.5pt; text-align: start; break-inside: avoid; }
 .body th, .body td { border-bottom: 0.5pt solid #999; padding: 2pt 3pt; vertical-align: top; }
 .body hr { border: 0; border-top: 0.5pt solid #111; }
 .body a { color: inherit; text-decoration: none; }
@@ -211,7 +237,22 @@ body { margin: 0; background: #fff; color: #111; font-family: 'Source Serif 4', 
 .source a { color: inherit; text-decoration: none; }
 `;
 
-export function renderMagazine(input: { articles: BrewArticle[]; date: Date }): string {
+/** Booklet pages are A5 (two per A4 sheet), so the page box shrinks and the large type steps down. Body text stays 10.75pt. */
+const BOOKLET_CSS = `
+/* Cover: fills the first A5 page (210mm minus 14mm top and 16mm bottom margins). */
+.cover { height: 180mm; }
+.masthead { font-size: 60px; }
+.cover-title .t { font-size: 17px; }
+.headline { font-size: 28px; }
+.byline { font-size: 15px; }
+`;
+
+const FLAT_PAGE = pageRule('A4', '16mm 30mm');
+const BOOKLET_PAGE = pageRule('A5', '14mm 16mm 16mm');
+
+export function renderMagazine(input: { articles: BrewArticle[]; date: Date; layout?: PaperLayout }): string {
+  const booklet = input.layout === 'booklet';
+  const css = booklet ? BOOKLET_PAGE + CSS + BOOKLET_CSS : FLAT_PAGE + CSS;
   const pieces = toPieces(input.articles);
   const title = `Paperbrew · ${formatIssueDate(input.date)}`;
   return `<!doctype html>
@@ -220,7 +261,7 @@ export function renderMagazine(input: { articles: BrewArticle[]; date: Date }): 
 <meta charset="utf-8">
 <title>${escapeHtml(title)}</title>
 <link rel="stylesheet" href="${escapeHtml(FONTS)}">
-<style>${CSS}</style>
+<style>${css}</style>
 </head>
 <body>
 ${cover(pieces, input.date)}
