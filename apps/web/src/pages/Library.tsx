@@ -55,7 +55,7 @@ function LibraryContent({ name }: { name: string }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const splitRef = useRef<HTMLSpanElement>(null);
   const caretRef = useRef<HTMLButtonElement>(null);
-  // Saves run one after another. `saveRef` is the latest one (resolves true if it was stored);
+  // Saves run one after another. `saveRef` is the latest one still in flight (resolves true if stored; null once settled);
   // `savedLayoutRef` is the last layout the server confirmed, which a failed save reverts to.
   const saveRef = useRef<Promise<boolean> | null>(null);
   const savedLayoutRef = useRef<PaperLayout>('flat');
@@ -154,6 +154,10 @@ function LibraryContent({ name }: { name: string }) {
       return false;
     })();
     saveRef.current = save;
+    // Once it settles it is no longer in flight, so Brew stops waiting for it.
+    void save.then(() => {
+      if (saveCountRef.current === id) saveRef.current = null;
+    });
   }
 
   async function brew() {
@@ -161,7 +165,17 @@ function LibraryContent({ name }: { name: string }) {
     setBrewError('');
     try {
       // The server brews with the saved layout, so let a pending save land first.
-      if (saveRef.current && !(await saveRef.current)) return;
+      // Wait until no save is in flight (a newer pick may replace the one we awaited). If the last
+      // save failed, its error stays visible and nothing is downloaded.
+      let pending = saveRef.current;
+      let saved = true;
+      while (pending) {
+        saved = await pending;
+        const latest = saveRef.current;
+        if (latest === pending) break;
+        pending = latest;
+      }
+      if (!saved) return;
       const res = await fetch('/api/brew');
       if (!res.ok) {
         setBrewError(await errorText(res, 'Brewing failed.'));
