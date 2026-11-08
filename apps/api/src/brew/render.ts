@@ -144,7 +144,15 @@ function article(p: Piece): string {
 }
 
 const CSS = `
-@page { size: A4; margin: 16mm 18mm; }
+@page {
+  size: A4; margin: 16mm 30mm;
+  /* Page numbers in the bottom margin (CSS margin boxes, Chrome 131+). The cover counts as page 1 but shows none. */
+  @bottom-center {
+    content: counter(page);
+    font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 8pt; letter-spacing: 0.04em; color: #111;
+  }
+}
+@page :first { @bottom-center { content: none; } }
 * { box-sizing: border-box; }
 html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 body { margin: 0; background: #fff; color: #111; font-family: 'Source Serif 4', Georgia, serif; }
@@ -176,7 +184,7 @@ body { margin: 0; background: #fff; color: #111; font-family: 'Source Serif 4', 
 .byline { margin: 12px 0 0; font-size: 18px; font-style: italic; }
 .article > .rule { margin-top: 18px; }
 .body {
-  margin-top: 18px; font-size: 11.5pt; line-height: 1.5; text-align: justify; hyphens: auto; -webkit-hyphens: auto;
+  margin-top: 18px; font-size: 10.75pt; line-height: 1.5; text-align: justify; hyphens: auto; -webkit-hyphens: auto;
   overflow-wrap: break-word;
 }
 .body > :first-child { margin-top: 0; }
@@ -187,7 +195,7 @@ body { margin: 0; background: #fff; color: #111; font-family: 'Source Serif 4', 
 .body h2, .body h3, .body h4, .body h5, .body h6 {
   text-align: left; line-height: 1.2; margin: 1em 0 0.4em; break-inside: avoid; break-after: avoid;
 }
-.body h2 { font-size: 13pt; } .body h3 { font-size: 11.5pt; } .body h4, .body h5, .body h6 { font-size: 10.5pt; }
+.body h2 { font-size: 13pt; } .body h3 { font-size: 10.75pt; } .body h4, .body h5, .body h6 { font-size: 10.5pt; }
 .body img { display: block; max-width: 100%; height: auto; margin: 0.4em 0; break-inside: avoid; }
 .body figure { margin: 0.6em 0; break-inside: avoid; }
 .body figcaption { font-size: 8.5pt; line-height: 1.3; color: #4a4a4a; text-align: left; }
