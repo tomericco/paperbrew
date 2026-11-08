@@ -1,9 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { authClient } from '../auth';
 import { Layout } from '../Layout';
 
-type Me = { address: string; token: string; email: string | null };
+type PaperLayout = 'flat' | 'booklet';
+
+type Me = { address: string; token: string; email: string | null; paperLayout: PaperLayout };
+
+const LAYOUTS: { value: PaperLayout; label: string; hint: string }[] = [
+  { value: 'flat', label: 'Flat A4', hint: 'Single pages, staple in the corner.' },
+  { value: 'booklet', label: 'Booklet (A4, folded)', hint: 'Print two-sided, flip on short edge, fold and staple.' },
+];
 
 type Article = {
   id: string;
@@ -45,6 +52,15 @@ function LibraryContent({ name }: { name: string }) {
   const [brewing, setBrewing] = useState(false);
   const [brewError, setBrewError] = useState('');
 
+  const [menuOpen, setMenuOpen] = useState(false);
+  const splitRef = useRef<HTMLSpanElement>(null);
+  const caretRef = useRef<HTMLButtonElement>(null);
+  // Saves run one after another. `saveRef` is the latest one (resolves true if it was stored);
+  // `savedLayoutRef` is the last layout the server confirmed, which a failed save reverts to.
+  const saveRef = useRef<Promise<boolean> | null>(null);
+  const savedLayoutRef = useRef<PaperLayout>('flat');
+  const saveCountRef = useRef(0);
+
   useEffect(() => {
     let cancelled = false;
     Promise.all([fetch('/api/me'), fetch('/api/articles')])
@@ -57,6 +73,7 @@ function LibraryContent({ name }: { name: string }) {
         const meBody = (await meRes.json()) as Me;
         const articlesBody = (await articlesRes.json()) as { articles: Article[] };
         if (cancelled) return;
+        savedLayoutRef.current = meBody.paperLayout;
         setMe(meBody);
         setArticles(articlesBody.articles);
       })
@@ -68,10 +85,83 @@ function LibraryContent({ name }: { name: string }) {
     };
   }, []);
 
+  // While the menu is open: Escape closes it (focus back on the caret), a press outside closes it,
+  // and focus starts on the checked item.
+  useEffect(() => {
+    if (!menuOpen) return;
+    splitRef.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      setMenuOpen(false);
+      caretRef.current?.focus();
+    }
+    function onPointerDown(e: PointerEvent) {
+      if (!splitRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [menuOpen]);
+
+  function onMenuKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key === 'Tab') {
+      // Close and put focus on the caret; the browser then moves on from there.
+      setMenuOpen(false);
+      caretRef.current?.focus();
+      return;
+    }
+    const step = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const items = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitemradio"]'));
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    items[(at + step + items.length) % items.length]?.focus();
+  }
+
+  function chooseLayout(next: PaperLayout) {
+    setMenuOpen(false);
+    caretRef.current?.focus();
+    if (!me || next === me.paperLayout) return;
+    setBrewError('');
+    setMe({ ...me, paperLayout: next });
+    const after = saveRef.current;
+    const id = ++saveCountRef.current;
+    const save: Promise<boolean> = (async () => {
+      await after;
+      let failure = '';
+      try {
+        const res = await fetch('/api/me/settings', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ paperLayout: next }),
+        });
+        if (res.ok) {
+          savedLayoutRef.current = next;
+          return true;
+        }
+        failure = await errorText(res, 'Could not save your paper layout.');
+      } catch {
+        failure = 'Could not save your paper layout.';
+      }
+      // A later pick supersedes this one, so only the latest save reverts and reports.
+      if (saveCountRef.current === id) {
+        setMe((prev) => (prev ? { ...prev, paperLayout: savedLayoutRef.current } : prev));
+        setBrewError(failure);
+      }
+      return false;
+    })();
+    saveRef.current = save;
+  }
+
   async function brew() {
     setBrewing(true);
     setBrewError('');
     try {
+      // The server brews with the saved layout, so let a pending save land first.
+      if (saveRef.current && !(await saveRef.current)) return;
       const res = await fetch('/api/brew');
       if (!res.ok) {
         setBrewError(await errorText(res, 'Brewing failed.'));
@@ -148,9 +238,46 @@ function LibraryContent({ name }: { name: string }) {
         <section className="span-12">
           <div className="page-head">
             <h1>Saved articles</h1>
-            <button type="button" className="btn-primary" onClick={brew} disabled={brewing || articles.length === 0}>
-              {brewing ? 'Brewing…' : 'Brew'}
-            </button>
+            <span className="split" ref={splitRef}>
+              <button
+                type="button"
+                className="btn-primary split-main"
+                onClick={brew}
+                disabled={brewing || articles.length === 0}
+              >
+                {brewing ? 'Brewing…' : 'Brew'}
+              </button>
+              <button
+                type="button"
+                className="btn-primary split-caret"
+                ref={caretRef}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                aria-label="Paper layout"
+                onClick={() => setMenuOpen((open) => !open)}
+              >
+                <svg width="10" height="6" viewBox="0 0 10 6" aria-hidden="true">
+                  <path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" />
+                </svg>
+              </button>
+              {menuOpen && (
+                <div className="menu" role="menu" aria-label="Paper layout" onKeyDown={onMenuKeyDown}>
+                  {LAYOUTS.map((layout) => (
+                    <button
+                      key={layout.value}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={me.paperLayout === layout.value}
+                      className="menu-item"
+                      onClick={() => chooseLayout(layout.value)}
+                    >
+                      <span className="menu-label">{layout.label}</span>
+                      <span className="menu-hint">{layout.hint}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </span>
           </div>
           {brewError && (
             <p className="error" role="alert">
