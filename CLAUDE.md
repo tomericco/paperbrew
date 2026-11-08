@@ -45,6 +45,7 @@ All from the repo root:
 - `sanitize-html` is pinned to 2.17.5 and `htmlparser2` is overridden to v10 in the root `package.json`: newer versions need the ESM-only htmlparser2 v12, which crashes on Vercel (`ERR_REQUIRE_ESM`). Don't bump either without deploying and checking `/health`.
 - The webhook returns 200 for anything ignored on purpose and 5xx only for real failures, which the provider retries. Both webhooks use basic auth from `INBOUND_WEBHOOK_USER`/`INBOUND_WEBHOOK_PASSWORD`.
 - Schema changes are additive and idempotent (`if not exists`) until a migration tool is adopted.
+- The web app is built phone-first: every screen must work at 375px wide with no sideways scroll, touch targets of at least 40px on touch screens, and hover styles only under `@media (hover: hover)`. Check new UI at phone width before calling it done.
 
 ## Hosting (decided)
 - Vercel functions for both web and API (Node runtime), Supabase Postgres. The API entry is `apps/api/api/index.ts`, serving the Hono app from `src/app.ts`.

@@ -308,11 +308,11 @@ function LibraryContent({ name }: { name: string }) {
                 <li key={article.id} className="list-item">
                   <div className="body">
                     {article.sourceUrl ? (
-                      <a className="title" href={article.sourceUrl}>
+                      <a className="title" dir="auto" href={article.sourceUrl}>
                         {article.title ?? article.sourceUrl}
                       </a>
                     ) : (
-                      <span className="title">{article.title ?? 'Untitled'}</span>
+                      <span className="title" dir="auto">{article.title ?? 'Untitled'}</span>
                     )}
                     <span className="meta">{articleMeta(article)}</span>
                   </div>
