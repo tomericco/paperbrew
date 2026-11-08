@@ -111,7 +111,7 @@ function cover(pieces: Piece[], date: Date): string {
         ${shown
           .map(
             (p) => `<div class="cover-title">
-          <span class="t" dir="auto">${escapeHtml(p.title)}</span>${p.author ? `<span class="a">${escapeHtml(p.author)}</span>` : ''}
+          <span class="t" dir="auto">${escapeHtml(p.title)}</span>${p.author ? `<span class="a" dir="auto">${escapeHtml(p.author)}</span>` : ''}
         </div>`,
           )
           .join('\n')}

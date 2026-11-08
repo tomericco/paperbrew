@@ -162,6 +162,7 @@ function LibraryContent({ name }: { name: string }) {
 
   async function brew() {
     setBrewing(true);
+    setMenuOpen(false);
     setBrewError('');
     try {
       // The server brews with the saved layout, so let a pending save land first.
@@ -268,6 +269,7 @@ function LibraryContent({ name }: { name: string }) {
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
                 aria-label="Paper layout"
+                disabled={brewing}
                 onClick={() => setMenuOpen((open) => !open)}
               >
                 <svg width="10" height="6" viewBox="0 0 10 6" aria-hidden="true">
