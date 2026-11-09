@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Brand } from './Logo';
 
 /** The app shell: header with the brand and page actions, a centered content column, and a footer. */
 export function Layout({
@@ -15,7 +16,7 @@ export function Layout({
     <div className="shell">
       <header className="header">
         <div className="container">
-          <span className="brand">Paperbrew</span>
+          <Brand />
           {actions && <div className="header-actions">{actions}</div>}
         </div>
       </header>
