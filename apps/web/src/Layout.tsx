@@ -23,7 +23,7 @@ export function Layout({
         <div className="container">{children}</div>
       </main>
       <footer className="footer">
-        <div className="container">Paperbrew · read on paper</div>
+        <div className="container">© {new Date().getFullYear()} Paperbrew. All rights reserved.</div>
       </footer>
     </div>
   );

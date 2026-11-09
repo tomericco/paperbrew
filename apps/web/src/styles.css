@@ -159,14 +159,87 @@ button:disabled {
 
 /* Home */
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .hero {
-  max-width: 30rem;
+  max-width: 56rem;
   margin: 0 auto;
+  padding: 56px 0 72px;
   text-align: center;
 }
 
-.hero p {
-  margin: 0 0 24px;
+.hero h1 {
+  font-size: clamp(34px, 6vw, 56px);
+  text-wrap: balance;
+  margin: 0 0 20px;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+/* "method for <persona>" always on its own line, so the first line never changes. */
+.hero-for {
+  display: block;
+}
+
+/* All words share one grid cell: the cell is as wide as the longest word and nothing reflows. */
+.persona {
+  display: inline-grid;
+  justify-items: start;
+  overflow: hidden;
+  vertical-align: baseline;
+  /* Room for descenders inside the clip, given back so line spacing is unchanged. */
+  padding-bottom: 0.15em;
+  margin-bottom: -0.15em;
+  font-family: 'Fraunces', 'Source Serif 4', Georgia, serif;
+  font-weight: 600;
+  transition: width 420ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.persona-word {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(110%);
+  transition:
+    opacity 420ms ease,
+    transform 420ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.persona-word.is-active {
+  opacity: 1;
+  transform: none;
+}
+
+.persona-word.is-leaving {
+  transform: translateY(-110%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .persona {
+    transition: none;
+  }
+
+  .persona-word,
+  .persona-word.is-leaving {
+    transform: none;
+    transition: opacity 200ms linear;
+  }
+}
+
+.hero-lede {
+  max-width: 30rem;
+  margin: 0 auto 28px;
+  font-size: 19px;
 }
 
 .hero .btn {
@@ -174,9 +247,90 @@ button:disabled {
   padding: 9px 22px;
 }
 
+/* Home: the method, three numbered steps */
+
+.method {
+  /* A soft paper-toned panel sets the method apart without lines or boxes. */
+  background: #f5f2ec;
+  border-radius: 16px;
+  padding: 56px 48px 64px;
+  margin-bottom: 48px;
+}
+
+.method h2 {
+  margin: 0 0 56px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 56px 48px;
+}
+
+@media (max-width: 960px) {
+  .steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.step-num {
+  display: block;
+  font-family: 'Fraunces', 'Source Serif 4', Georgia, serif;
+  font-weight: 600;
+  font-size: 44px;
+  line-height: 1;
+  margin-bottom: 20px;
+}
+
+.step h3 {
+  margin: 0 0 10px;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.step p {
+  margin: 0;
+  color: #444;
+  line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+  .steps {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+  }
+
+  .method {
+    padding: 40px 24px 48px;
+    margin-bottom: 32px;
+  }
+
+  .method h2 {
+    margin-bottom: 40px;
+  }
+
+  .hero {
+    padding: 32px 0 48px;
+  }
+}
+
+.footer {
+  border-top: 1px solid #e6e6e6;
+  font-size: 14px;
+  color: #6b6b6b;
+}
+
 .footer .container {
-  padding-top: 16px;
-  padding-bottom: 16px;
+  padding-top: 20px;
+  padding-bottom: 20px;
 }
 
 /* Page grid: 12 columns on desktop, one column on narrow screens */
@@ -408,7 +562,7 @@ button:disabled {
 }
 
 @media (max-width: 600px) {
-  h1 {
+  h1:not(.hero h1) {
     font-size: 28px;
   }
 
