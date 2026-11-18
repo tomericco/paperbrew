@@ -208,7 +208,10 @@ function footerRule(p: Piece, index: number, maxTitle: number): string {
 }
 
 const CSS = `
+/* The page margin is small so the running footer spans the page; the text column is narrowed by padding (34mm a side on A4; the booklet keeps its own margins). */
+:root { --col-pad: 22mm; }
 * { box-sizing: border-box; }
+.cover, .article { padding-inline: var(--col-pad); }
 html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 body { margin: 0; background: #fff; color: #111; font-family: 'Source Serif 4', 'Frank Ruhl Libre', 'Noto Naskh Arabic', Georgia, serif; }
 .mono { font-family: 'IBM Plex Mono', ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
@@ -239,7 +242,7 @@ body { margin: 0; background: #fff; color: #111; font-family: 'Source Serif 4', 
 .byline { margin: 12px 0 0; font-size: 18px; font-style: italic; }
 .article > .rule { margin-top: 18px; }
 .body {
-  margin-top: 18px; font-size: 10.75pt; line-height: 1.6; font-weight: 350; text-align: justify; hyphens: auto; -webkit-hyphens: auto;
+  margin-top: 18px; font-size: 10.75pt; line-height: 1.7; font-weight: 350; text-align: justify; hyphens: auto; -webkit-hyphens: auto;
   overflow-wrap: break-word;
 }
 .body > :first-child { margin-top: 0; }
@@ -272,6 +275,8 @@ body { margin: 0; background: #fff; color: #111; font-family: 'Source Serif 4', 
 
 /** Booklet pages are A5 (two per A4 sheet), so the page box shrinks and the large type steps down. Body text stays 10.75pt. */
 const BOOKLET_CSS = `
+:root { --col-pad: 0mm; }
+.body { line-height: 1.6; }
 /* Cover: fills the first A5 page (210mm minus 14mm top and 16mm bottom margins). */
 .cover { height: 180mm; }
 .masthead { font-size: 60px; }
@@ -280,7 +285,7 @@ const BOOKLET_CSS = `
 .byline { font-size: 15px; }
 `;
 
-const FLAT_PAGE = pageRule('A4', '16mm 30mm');
+const FLAT_PAGE = pageRule('A4', '16mm 12mm');
 const BOOKLET_PAGE = pageRule('A5', '14mm 16mm 16mm');
 
 export function renderMagazine(input: { articles: BrewArticle[]; date: Date; layout?: PaperLayout }): string {
