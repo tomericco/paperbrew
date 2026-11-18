@@ -266,6 +266,12 @@ describe('booklet layout and right-to-left', () => {
     expect(html).not.toContain('padding-left');
   });
 
+  it('sets body text light and loose, and requests a font weight range that covers it', () => {
+    const html = renderMagazine({ articles: [first], date: DATE });
+    expect(html).toMatch(/\.body \{[^}]*line-height: 1\.6; font-weight: 350;/);
+    expect(html).toContain('wght@0,8..60,300..700;1,8..60,300..700');
+  });
+
   it('loads Hebrew and Arabic fonts', () => {
     const html = renderMagazine({ articles: [first], date: DATE });
     expect(html).toContain('Frank+Ruhl+Libre');

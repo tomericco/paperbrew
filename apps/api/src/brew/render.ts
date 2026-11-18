@@ -19,7 +19,7 @@ export type BrewArticle = {
 
 const FONTS =
   'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500' +
-  '&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,600' +
+  '&family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..700' +
   '&family=Frank+Ruhl+Libre:wght@400;700&family=Noto+Naskh+Arabic:wght@400;700&display=block';
 
 const COVER_TITLES = 3;
@@ -239,7 +239,7 @@ body { margin: 0; background: #fff; color: #111; font-family: 'Source Serif 4', 
 .byline { margin: 12px 0 0; font-size: 18px; font-style: italic; }
 .article > .rule { margin-top: 18px; }
 .body {
-  margin-top: 18px; font-size: 10.75pt; line-height: 1.5; text-align: justify; hyphens: auto; -webkit-hyphens: auto;
+  margin-top: 18px; font-size: 10.75pt; line-height: 1.6; font-weight: 350; text-align: justify; hyphens: auto; -webkit-hyphens: auto;
   overflow-wrap: break-word;
 }
 .body > :first-child { margin-top: 0; }
