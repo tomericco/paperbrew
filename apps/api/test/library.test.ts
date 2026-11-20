@@ -147,6 +147,7 @@ describe('archiving articles', () => {
     const res = await app.request('/articles', { headers: cookie });
     expect(res.status).toBe(200);
     expect(String(articleSql(query)[0]![0])).toContain('archived_at is null');
+    expect(articleSql(query)[0]![1]).toEqual(['user-1']);
   });
 
   it('GET /articles?archived=1 lists archived with archivedAt', async () => {
@@ -159,6 +160,8 @@ describe('archiving articles', () => {
     const sql = String(articleSql(query)[0]![0]);
     expect(sql).toContain('archived_at is not null');
     expect(sql).toContain('limit 500');
+    expect(sql).toMatch(/order by archived_at desc, created_at asc/);
+    expect(articleSql(query)[0]![1]).toEqual(['user-1']);
     const { articles } = await res.json();
     expect(articles[0].archivedAt).toBe('2026-11-20T10:00:00.000Z');
     expect(articles[0].id).toBe(A);
@@ -203,6 +206,7 @@ describe('archiving articles', () => {
     expect(res.status).toBe(204);
     const update = articleSql(query)[0]!;
     expect(String(update[0])).toContain('archived_at = null');
+    expect(String(update[0])).toContain('archived_at is not null');
     expect(update[1]).toEqual([A, 'user-1']);
   });
 

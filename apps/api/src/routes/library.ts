@@ -147,7 +147,7 @@ library.get('/articles', async (c) => {
       `select id, title, site_name, source_url, status, word_count, created_at, archived_at
        from articles
        where user_id = $1 and archived_at is not null
-       order by archived_at desc, created_at desc
+       order by archived_at desc, created_at asc
        limit 500`,
       [userId],
     );
