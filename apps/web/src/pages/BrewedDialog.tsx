@@ -3,7 +3,7 @@ import { LogoMark } from '../Logo';
 
 const HEADLINES = ['Fresh off the press.', 'Your issue is brewed.', 'Hot off the press, ready to pour.'];
 
-/** How long "Archived. Your queue is clear." shows before the dialog closes itself. */
+/** How long the "Archived N articles." confirmation shows before the dialog closes itself. */
 const DONE_MS = 1200;
 
 type Phase = 'idle' | 'archiving' | 'done' | 'error';
@@ -97,7 +97,7 @@ export function BrewedDialog({
         </p>
         {phase === 'done' ? (
           <p className="brewed-done" role="status" tabIndex={-1} ref={statusRef}>
-            Archived. Your queue is clear.
+            Archived {articles}.
           </p>
         ) : (
           <>

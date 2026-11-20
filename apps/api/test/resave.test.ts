@@ -32,7 +32,7 @@ vi.mock('../src/extract/readable.js', () => ({ extractArticle, extractNewsletter
 const { processEmail } = await import('../src/pipeline/processEmail.js');
 const { fetchArticle } = await import('../src/pipeline/fetchArticle.js');
 
-const UNARCHIVE = /update articles set archived_at = null/;
+const UNARCHIVE = /update articles set archived_at = null, created_at = now\(\), updated_at = now\(\)/;
 
 describe('re-saving an archived article', () => {
   beforeEach(() => {
@@ -56,7 +56,7 @@ describe('re-saving an archived article', () => {
     const unarchive = calls.find(([sql]) => UNARCHIVE.test(sql));
     expect(unarchive).toBeDefined();
     expect(unarchive![0].replace(/\s+/g, ' ')).toContain(
-      'update articles set archived_at = null where user_id = $1 and canonical_url = $2 and archived_at is not null',
+      'update articles set archived_at = null, created_at = now(), updated_at = now() where user_id = $1 and canonical_url = $2 and archived_at is not null',
     );
     expect(unarchive![1]).toEqual(['user-1', 'https://example.com/a']);
     expect(calls.some(([sql]) => /insert into jobs/.test(sql))).toBe(false);
