@@ -564,6 +564,166 @@ button:disabled {
   color: #6b6b6b;
 }
 
+/* Library tabs: Saved and Archived, underlined like a magazine's section rule. */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 12px;
+  border-bottom: 1px solid #e6e6e6;
+}
+
+.tab {
+  min-height: 40px;
+  padding: 8px 12px;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  font-size: 15px;
+  color: #6b6b6b;
+}
+
+.tab[aria-selected='true'] {
+  color: #111;
+  font-weight: 600;
+  border-bottom-color: #111;
+}
+
+@media (hover: hover) {
+  .tab:hover:not(:disabled) {
+    background: transparent;
+    color: #111;
+  }
+}
+
+.tab:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Archived: one group per brewed issue. */
+
+.issue + .issue {
+  margin-top: 28px;
+}
+
+.issue-head {
+  margin: 20px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b6b6b;
+}
+
+.issue .list {
+  margin-top: 10px;
+}
+
+/* Brewed dialog: a calm, centered card after a brew downloads. */
+
+.brewed {
+  width: 100%;
+  max-width: min(440px, calc(100vw - 32px));
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  color: #111;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+}
+
+.brewed::backdrop {
+  background: rgba(17, 17, 17, 0.45);
+}
+
+.brewed[open] {
+  animation: brewed-in 260ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.brewed[open]::backdrop {
+  animation: brewed-fade 260ms ease;
+}
+
+@keyframes brewed-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+
+@keyframes brewed-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brewed[open],
+  .brewed[open]::backdrop {
+    animation: none;
+  }
+}
+
+.brewed-body {
+  padding: 32px 28px 24px;
+  text-align: center;
+}
+
+.brewed-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 16px;
+  border-radius: 50%;
+  background: #f5f2ec;
+}
+
+.brewed-title {
+  margin: 0 0 8px;
+  font-family: 'Fraunces', 'Source Serif 4', Georgia, serif;
+  font-weight: 600;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.brewed-text {
+  margin: 0 auto 24px;
+  max-width: 22rem;
+  color: #444;
+  text-wrap: pretty;
+}
+
+.brewed-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.brewed-actions button {
+  min-height: 44px;
+  font-size: 15px;
+  padding: 10px 16px;
+}
+
+.brewed-error {
+  margin: 0 0 12px;
+}
+
+.brewed-done {
+  min-height: 96px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  font-weight: 600;
+}
+
+.brewed-done:focus {
+  outline: none;
+}
+
 .providers {
   list-style: none;
   margin: 0;
@@ -625,6 +785,10 @@ button:disabled {
 
   .header-actions .who {
     flex: 1;
+  }
+
+  .brewed-body {
+    padding: 28px 20px 20px;
   }
 
   /* Articles: the title gets up to two lines and the details move underneath, so status badges stay visible. */

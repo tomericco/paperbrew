@@ -119,34 +119,76 @@ library.put('/me/settings', async (c) => {
   return c.json({ paperLayout: body.data.paperLayout });
 });
 
+type ArticleRow = {
+  id: string;
+  title: string | null;
+  site_name: string | null;
+  source_url: string | null;
+  status: string;
+  word_count: number | null;
+  created_at: Date;
+  archived_at?: Date;
+};
+
+const toArticle = (r: ArticleRow) => ({
+  id: r.id,
+  title: r.title,
+  siteName: r.site_name,
+  sourceUrl: r.source_url,
+  status: r.status,
+  wordCount: r.word_count,
+  createdAt: r.created_at,
+});
+
 library.get('/articles', async (c) => {
-  const { rows } = await pool.query<{
-    id: string;
-    title: string | null;
-    site_name: string | null;
-    source_url: string | null;
-    status: string;
-    word_count: number | null;
-    created_at: Date;
-  }>(
+  const userId = c.get('userId');
+  if (c.req.query('archived') === '1') {
+    const { rows } = await pool.query<ArticleRow & { archived_at: Date }>(
+      `select id, title, site_name, source_url, status, word_count, created_at, archived_at
+       from articles
+       where user_id = $1 and archived_at is not null
+       order by archived_at desc, created_at asc
+       limit 500`,
+      [userId],
+    );
+    return c.json({ articles: rows.map((r) => ({ ...toArticle(r), archivedAt: r.archived_at })) });
+  }
+  const { rows } = await pool.query<ArticleRow>(
     `select id, title, site_name, source_url, status, word_count, created_at
      from articles
-     where user_id = $1
+     where user_id = $1 and archived_at is null
      order by created_at desc
      limit 200`,
-    [c.get('userId')],
+    [userId],
   );
-  return c.json({
-    articles: rows.map((r) => ({
-      id: r.id,
-      title: r.title,
-      siteName: r.site_name,
-      sourceUrl: r.source_url,
-      status: r.status,
-      wordCount: r.word_count,
-      createdAt: r.created_at,
-    })),
-  });
+  return c.json({ articles: rows.map(toArticle) });
+});
+
+const ArchiveBody = z.object({ ids: z.array(z.string().regex(UUID_RE)).min(1).max(50) });
+
+library.post('/articles/archive', async (c) => {
+  const body = ArchiveBody.safeParse(await c.req.json().catch(() => null));
+  if (!body.success) return c.json({ error: 'ids must be 1 to 50 article ids' }, 400);
+  const ids = [...new Set(body.data.ids)];
+  const { rows, rowCount } = await pool.query<{ archived_at: Date }>(
+    `update articles set archived_at = now()
+     where user_id = $1 and id = any($2::uuid[]) and archived_at is null
+     returning archived_at`,
+    [c.get('userId'), ids],
+  );
+  const archivedAt = rows[0]?.archived_at ?? new Date();
+  return c.json({ archived: rowCount ?? 0, archivedAt });
+});
+
+library.post('/articles/:id/unarchive', async (c) => {
+  const id = c.req.param('id');
+  if (!UUID_RE.test(id)) return c.json({ error: 'not found' }, 404);
+  const { rowCount } = await pool.query(
+    'update articles set archived_at = null where id = $1 and user_id = $2 and archived_at is not null',
+    [id, c.get('userId')],
+  );
+  if (!rowCount) return c.json({ error: 'not found' }, 404);
+  return c.body(null, 204);
 });
 
 library.delete('/articles/:id', async (c) => {

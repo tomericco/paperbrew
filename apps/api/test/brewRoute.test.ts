@@ -182,6 +182,34 @@ describe('GET /brew', () => {
     expect(doc.getPageCount()).toBe(2);
   });
 
+  it('brews only unarchived articles', async () => {
+    mockDb([ROW]);
+    htmlToPdf.mockResolvedValue(pdfStream([1]));
+    await brew.request('/brew', { headers: { 'x-test-user': 'yes' } });
+    const [sql] = query.mock.calls.find(([q]) => /from articles/.test(q))!;
+    expect(sql).toContain('archived_at is null');
+  });
+
+  it('reports brewed ids in a header', async () => {
+    mockDb([{ ...ROW, id: 'a1' }, { ...ROW, id: 'a2' }]);
+    htmlToPdf.mockResolvedValue(pdfStream([1]));
+    const flat = await brew.request('/brew', { headers: { 'x-test-user': 'yes' } });
+    expect(flat.headers.get('x-brew-article-ids')).toBe('a1,a2');
+
+    mockDb([{ ...ROW, id: 'a1' }, { ...ROW, id: 'a2' }], 'booklet');
+    htmlToPdf.mockResolvedValue(bytesStream(await a5Pdf(2)));
+    const booklet = await brew.request('/brew', { headers: { 'x-test-user': 'yes' } });
+    expect(booklet.status).toBe(200);
+    expect(booklet.headers.get('x-brew-article-ids')).toBe('a1,a2');
+  });
+
+  it('empty brew sends an empty ids header', async () => {
+    mockDb([]);
+    htmlToPdf.mockResolvedValue(pdfStream([1]));
+    const res = await brew.request('/brew', { headers: { 'x-test-user': 'yes' } });
+    expect(res.headers.get('x-brew-article-ids')).toBe('');
+  });
+
   it('booklet imposition failure returns 500', async () => {
     mockDb([ROW], 'booklet');
     htmlToPdf.mockResolvedValue(pdfStream([1, 2, 3]));

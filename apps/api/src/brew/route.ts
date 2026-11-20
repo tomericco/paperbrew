@@ -15,6 +15,7 @@ brew.use('/brew', requireUser);
 
 brew.get('/brew', async (c) => {
   const { rows } = await pool.query<{
+    id: string;
     title: string | null;
     author: string | null;
     site_name: string | null;
@@ -22,9 +23,9 @@ brew.get('/brew', async (c) => {
     reading_minutes: number | null;
     content_html: string | null;
   }>(
-    `select title, author, site_name, source_url, reading_minutes, content_html
+    `select id, title, author, site_name, source_url, reading_minutes, content_html
      from articles
-     where user_id = $1 and status = 'ready'
+     where user_id = $1 and status = 'ready' and archived_at is null
      order by created_at asc
      limit ${MAX_ARTICLES}`,
     [c.get('userId')],
@@ -75,5 +76,7 @@ brew.get('/brew', async (c) => {
     'content-type': 'application/pdf',
     'content-disposition': `attachment; filename="paperbrew-${day}${layout === 'booklet' ? '-booklet' : ''}.pdf"`,
     'cache-control': 'private, no-store',
+    // What went into this issue, in brew order, so the web app can archive exactly these.
+    'x-brew-article-ids': rows.map((r) => r.id).join(','),
   });
 });

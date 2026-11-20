@@ -30,6 +30,13 @@ export async function processEmail(inboundEmailId: string): Promise<void> {
       if (ins.rows[0]) {
         linksAdded++;
         await enqueue(client, 'fetch_article', { id: ins.rows[0].id });
+      } else {
+        // Already saved: forwarding it again moves it back to the Saved queue.
+        await client.query(
+          `update articles set archived_at = null, created_at = now(), updated_at = now()
+           where user_id = $1 and canonical_url = $2 and archived_at is not null`,
+          [row.user_id, url],
+        );
       }
     }
 

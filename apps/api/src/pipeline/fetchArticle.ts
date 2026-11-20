@@ -34,6 +34,12 @@ export async function fetchArticle(articleId: string, isLastAttempt: boolean): P
     } catch (err) {
       // Same article already saved under its canonical URL (e.g. sent once via a tracking link): drop the duplicate.
       if (isUniqueViolation(err)) {
+        // Saving it again also moves the existing copy back to the Saved queue.
+        await pool.query(
+          `update articles set archived_at = null, created_at = now(), updated_at = now()
+           where user_id = $1 and canonical_url = $2 and archived_at is not null`,
+          [row.user_id, canonical],
+        );
         await pool.query('delete from articles where id = $1', [articleId]);
         return;
       }
