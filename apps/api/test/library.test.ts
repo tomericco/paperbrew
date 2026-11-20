@@ -30,6 +30,8 @@ describe('signed-in user routes without a session', () => {
     ['GET', '/articles', undefined],
     ['GET', '/brew', undefined],
     ['DELETE', ARTICLE, undefined],
+    ['POST', '/articles/archive', { body: JSON.stringify({ ids: [ARTICLE.slice(10)] }), headers: { 'content-type': 'application/json' } }],
+    ['POST', ARTICLE + '/unarchive', undefined],
   ];
 
   it.each(cases)('%s %s -> 401', async (method, path, init) => {
@@ -108,5 +110,110 @@ describe('paper layout setting', () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'paperLayout must be flat or booklet' });
     expect(query.mock.calls.filter(([sql]) => /update users/.test(String(sql)))).toHaveLength(0);
+  });
+});
+
+describe('archiving articles', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const A = '11111111-1111-4111-8111-111111111111';
+  const B = '22222222-2222-4222-8222-222222222222';
+  const cookie = { cookie: 'better-auth.session_token=x' };
+
+  const signedIn = (articleRows: unknown[] = [], rowCount: number | null = articleRows.length) => {
+    vi.spyOn(auth.api, 'getSession').mockResolvedValue({
+      user: { id: 'auth-1', email: 'a@example.com' },
+      session: {},
+    } as never);
+    return vi.spyOn(pool, 'query').mockImplementation((async (sql: string) => {
+      if (/from users where auth_user_id/.test(sql)) return { rows: [{ id: 'user-1' }] };
+      if (/articles/.test(sql)) return { rows: articleRows, rowCount };
+      return { rows: [] };
+    }) as never);
+  };
+
+  const articleSql = (query: ReturnType<typeof signedIn>) =>
+    query.mock.calls.filter(([sql]) => /articles/.test(String(sql)));
+
+  const post = (body: unknown) =>
+    app.request('/articles/archive', {
+      method: 'POST',
+      headers: { ...cookie, 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+
+  it('GET /articles excludes archived', async () => {
+    const query = signedIn();
+    const res = await app.request('/articles', { headers: cookie });
+    expect(res.status).toBe(200);
+    expect(String(articleSql(query)[0]![0])).toContain('archived_at is null');
+  });
+
+  it('GET /articles?archived=1 lists archived with archivedAt', async () => {
+    const archivedAt = new Date('2026-11-20T10:00:00.000Z');
+    const query = signedIn([
+      { id: A, title: 'T', site_name: 's', source_url: 'https://x.test', status: 'ready', word_count: 10, created_at: new Date('2026-11-01T00:00:00Z'), archived_at: archivedAt },
+    ]);
+    const res = await app.request('/articles?archived=1', { headers: cookie });
+    expect(res.status).toBe(200);
+    const sql = String(articleSql(query)[0]![0]);
+    expect(sql).toContain('archived_at is not null');
+    expect(sql).toContain('limit 500');
+    const { articles } = await res.json();
+    expect(articles[0].archivedAt).toBe('2026-11-20T10:00:00.000Z');
+    expect(articles[0].id).toBe(A);
+  });
+
+  it('archives only own, unarchived rows', async () => {
+    const archivedAt = new Date('2026-11-20T10:00:00.000Z');
+    const query = signedIn([{ archived_at: archivedAt }, { archived_at: archivedAt }], 2);
+    const res = await post({ ids: [A, B, A] });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ archived: 2, archivedAt: '2026-11-20T10:00:00.000Z' });
+    const update = articleSql(query).find(([sql]) => /update articles/.test(String(sql)))!;
+    expect(String(update[0])).toContain('user_id =');
+    expect(String(update[0])).toContain('archived_at is null');
+    expect(update[1]).toEqual(expect.arrayContaining(['user-1']));
+    expect(update[1]).toContainEqual([A, B]);
+  });
+
+  it('archives nothing when no row matches', async () => {
+    signedIn([], 0);
+    const res = await post({ ids: [A] });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.archived).toBe(0);
+    expect(Number.isNaN(Date.parse(body.archivedAt))).toBe(false);
+  });
+
+  const tooMany = Array.from({ length: 51 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`);
+  it.each([{ ids: [] }, { ids: ['nope'] }, { ids: tooMany }, undefined])('rejects a bad archive body %#', async (body) => {
+    const query = signedIn();
+    const res = await post(body);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toHaveProperty('error');
+    expect(articleSql(query)).toHaveLength(0);
+  });
+
+  const unarchive = (id: string) => app.request(`/articles/${id}/unarchive`, { method: 'POST', headers: cookie });
+
+  it('unarchive returns 204 when a row was restored', async () => {
+    const query = signedIn([], 1);
+    const res = await unarchive(A);
+    expect(res.status).toBe(204);
+    const update = articleSql(query)[0]!;
+    expect(String(update[0])).toContain('archived_at = null');
+    expect(update[1]).toEqual([A, 'user-1']);
+  });
+
+  it('unarchive returns 404 when nothing matched', async () => {
+    signedIn([], 0);
+    expect((await unarchive(A)).status).toBe(404);
+  });
+
+  it('unarchive returns 404 for a non-UUID id without a query', async () => {
+    const query = signedIn();
+    expect((await unarchive('nope')).status).toBe(404);
+    expect(articleSql(query)).toHaveLength(0);
   });
 });

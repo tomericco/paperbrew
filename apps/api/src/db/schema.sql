@@ -87,6 +87,9 @@ create unique index if not exists articles_user_canonical_uq
 create unique index if not exists articles_user_email_uq
   on articles (user_id, inbound_email_id) where source_type = 'email';
 create index if not exists articles_user_created_idx on articles (user_id, created_at desc);
+alter table articles add column if not exists archived_at timestamptz;
+create index if not exists articles_user_archived_idx
+  on articles (user_id, archived_at desc) where archived_at is not null;
 
 create table if not exists jobs (
   id            bigserial primary key,
