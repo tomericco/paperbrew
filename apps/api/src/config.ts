@@ -27,6 +27,13 @@ const Env = z.object({
     .string()
     .optional()
     .transform((v) => v || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
+  // Encrypts Gmail refresh tokens at rest (AES-256-GCM). Base64 of 32 bytes: `openssl rand -base64 32`.
+  // Optional: without it (or the Google client pair) Gmail sync stays off.
+  GMAIL_TOKEN_KEY: z
+    .string()
+    .optional()
+    .transform((v) => v || undefined)
+    .refine((v) => v === undefined || Buffer.from(v, 'base64').length === 32, 'GMAIL_TOKEN_KEY must be base64 of exactly 32 bytes'),
   // Required for GET /cron/run-jobs; without it the endpoint always answers 401.
   CRON_SECRET: z
     .string()

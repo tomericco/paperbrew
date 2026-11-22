@@ -20,6 +20,20 @@ vi.mock('../src/config.js', () => ({
 const { app } = await import('../src/app.js');
 const { auth } = await import('../src/auth/auth.js');
 const { pool } = await import('../src/db/client.js');
+const { gmailAvailable } = await import('../src/gmail/available.js');
+
+describe('gmailAvailable', () => {
+  const full = { GMAIL_TOKEN_KEY: 'k', GOOGLE_CLIENT_ID: 'id', GOOGLE_CLIENT_SECRET: 'secret' };
+
+  it('is true when the token key and the Google client pair are all set', () => {
+    expect(gmailAvailable(full)).toBe(true);
+  });
+
+  it.each(Object.keys(full))('is false when %s is missing or empty', (key) => {
+    expect(gmailAvailable({ ...full, [key]: undefined })).toBe(false);
+    expect(gmailAvailable({ ...full, [key]: '' })).toBe(false);
+  });
+});
 
 describe('signed-in user routes without a session', () => {
   const ARTICLE = '/articles/00000000-0000-0000-0000-000000000000';
@@ -92,6 +106,24 @@ describe('paper layout setting', () => {
     const res = await app.request('/me', { headers: { cookie: 'better-auth.session_token=x' } });
     expect(res.status).toBe(200);
     expect((await res.json()).paperLayout).toBe('booklet');
+  });
+
+  it('GET /me returns gmailAvailable from the environment', async () => {
+    const original = { ...process.env };
+    try {
+      delete process.env.GMAIL_TOKEN_KEY;
+      signedIn();
+      const off = await app.request('/me', { headers: { cookie: 'better-auth.session_token=x' } });
+      expect((await off.json()).gmailAvailable).toBe(false);
+
+      process.env.GMAIL_TOKEN_KEY = 'k';
+      process.env.GOOGLE_CLIENT_ID = 'id';
+      process.env.GOOGLE_CLIENT_SECRET = 'secret';
+      const on = await app.request('/me', { headers: { cookie: 'better-auth.session_token=x' } });
+      expect((await on.json()).gmailAvailable).toBe(true);
+    } finally {
+      process.env = original;
+    }
   });
 
   it('PUT /me/settings saves the layout', async () => {

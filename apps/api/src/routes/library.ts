@@ -6,6 +6,7 @@ import { provisionUser } from '../auth/provision.js';
 import { PAPER_LAYOUTS, type PaperLayout } from '../brew/layout.js';
 import { config } from '../config.js';
 import { isUniqueViolation, pool } from '../db/client.js';
+import { gmailAvailable } from '../gmail/available.js';
 import { formatAddress, normalizeToken } from '../inbound/address.js';
 
 /** Hono env for routes behind `requireUser`: `c.get('userId')` is our `users.id`. */
@@ -58,7 +59,12 @@ library.get('/me', async (c) => {
   );
   const row = rows[0];
   if (!row) return c.json({ error: 'no active address' }, 500);
-  return c.json({ ...addressOf(row.token), email: row.email, paperLayout: row.paper_layout });
+  return c.json({
+    ...addressOf(row.token),
+    email: row.email,
+    paperLayout: row.paper_layout,
+    gmailAvailable: gmailAvailable(process.env),
+  });
 });
 
 const AddressBody = z.object({ token: z.string() });
