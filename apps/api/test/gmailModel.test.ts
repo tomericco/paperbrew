@@ -58,20 +58,31 @@ describe('zeroShot loader', () => {
   });
 
   it('rejects when the download hangs, then rebuilds on the next call', async () => {
-    vi.useFakeTimers();
-    pipelineMock
-      .mockReturnValueOnce(new Promise(() => {})) // never settles
-      .mockResolvedValueOnce(async () => RESULT);
+    // Only the timeout timers are fake: real setImmediate lets the test wait for the real async import.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    // Keyed by call count, so the first build hangs and the second succeeds whatever the interleaving.
+    pipelineMock.mockImplementation((() => {
+      let calls = 0;
+      return () => (++calls === 1 ? new Promise(() => {}) : Promise.resolve(async () => RESULT));
+    })());
     const { zeroShot, LOAD_TIMEOUT_MS } = await freshModel();
 
-    const hung = zeroShot('text', ['a', 'b']);
-    const caught = hung.catch((e: Error) => e);
+    const caught = zeroShot('text', ['a', 'b']).catch((e: Error) => e);
+    // The first build must be inside pipeline() (past its dynamic import) before time moves on.
+    // Bounded by real time (Date is not faked), not by a loop count, so a loaded machine cannot cut it short.
+    for (const deadline = Date.now() + 20_000; pipelineMock.mock.calls.length < 1 && Date.now() < deadline; ) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    expect(pipelineMock).toHaveBeenCalledTimes(1);
+
     await vi.advanceTimersByTimeAsync(LOAD_TIMEOUT_MS + 1);
     expect(((await caught) as Error).message).toMatch(/timed out/i);
+    expect(vi.getTimerCount()).toBe(0);
 
     await expect(zeroShot('text', ['a', 'b'])).resolves.toEqual(RESULT);
     expect(pipelineMock).toHaveBeenCalledTimes(2);
-  });
+    expect(vi.getTimerCount()).toBe(0);
+  }, 30_000);
 
   it('does not reject a load that finishes in time, and leaves no timer behind', async () => {
     vi.useFakeTimers();
