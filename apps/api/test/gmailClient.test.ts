@@ -128,6 +128,31 @@ describe('gmail calls', () => {
   it('listMessages returns an empty list when there are no messages', async () => {
     fetchMock.mockResolvedValue(json({ resultSizeEstimate: 0 }));
     await expect(listMessages('tok', 'q', 10)).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('listMessages stops after one call when there is no nextPageToken', async () => {
+    fetchMock.mockResolvedValue(json({ messages: [{ id: 'm1' }] }));
+    await expect(listMessages('tok', 'q', 50)).resolves.toEqual(['m1']);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('listMessages follows nextPageToken, capping each page at 500 and the total at max', async () => {
+    const ids = (from: number, n: number) => Array.from({ length: n }, (_, i) => ({ id: `m${from + i}` }));
+    fetchMock
+      .mockResolvedValueOnce(json({ messages: ids(0, 500), nextPageToken: 'p2' }))
+      .mockResolvedValueOnce(json({ messages: ids(500, 200), nextPageToken: 'p3' }));
+    const out = await listMessages('tok', 'q', 600);
+    expect(out).toHaveLength(600);
+    expect(out[0]).toBe('m0');
+    expect(out[599]).toBe('m599');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const first = new URL(fetchMock.mock.calls[0][0]);
+    expect(first.searchParams.get('maxResults')).toBe('500');
+    expect(first.searchParams.has('pageToken')).toBe(false);
+    const second = new URL(fetchMock.mock.calls[1][0]);
+    expect(second.searchParams.get('maxResults')).toBe('100');
+    expect(second.searchParams.get('pageToken')).toBe('p2');
   });
 
   it('getMessage metadata asks for the header set', async () => {

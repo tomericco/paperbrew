@@ -135,13 +135,25 @@ export async function listHistory(
   return { messageIds: [...ids], historyId };
 }
 
+const MAX_PAGE = 500; // Gmail's cap on maxResults
+
+/** Up to `max` message ids matching `q`, following nextPageToken; de-duplicated, in Gmail's order. */
 export async function listMessages(accessToken: string, q: string, max: number): Promise<string[]> {
-  const page = await gmailGet<{ messages?: { id: string }[] }>(
-    accessToken,
-    '/messages',
-    new URLSearchParams({ q, maxResults: String(max) }),
-  );
-  return (page.messages ?? []).map((m) => m.id);
+  const ids = new Set<string>();
+  let pageToken: string | undefined;
+  while (ids.size < max) {
+    const params = new URLSearchParams({ q, maxResults: String(Math.min(MAX_PAGE, max - ids.size)) });
+    if (pageToken) params.set('pageToken', pageToken);
+    const page = await gmailGet<{ messages?: { id: string }[]; nextPageToken?: string }>(
+      accessToken,
+      '/messages',
+      params,
+    );
+    for (const m of page.messages ?? []) if (ids.size < max) ids.add(m.id);
+    pageToken = page.nextPageToken;
+    if (!pageToken) break;
+  }
+  return [...ids];
 }
 
 export function getMessage(accessToken: string, id: string, format: 'metadata' | 'full'): Promise<GmailMessage> {
