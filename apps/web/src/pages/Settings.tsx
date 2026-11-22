@@ -53,7 +53,7 @@ function SettingsContent({ name }: { name: string }) {
     const url = new URL(location.href);
     const outcome = url.searchParams.get('gmail');
     if (outcome === null) return;
-    if (outcome in NOTICES) setNotice(NOTICES[outcome]);
+    if (Object.hasOwn(NOTICES, outcome)) setNotice(NOTICES[outcome]);
     url.searchParams.delete('gmail');
     history.replaceState(history.state, '', url);
   }, []);

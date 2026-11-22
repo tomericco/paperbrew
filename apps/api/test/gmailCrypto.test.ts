@@ -53,6 +53,18 @@ describe('oauth state', () => {
     expect(verifyState(['u2', exp, sig].join('.'), secret, now)).toBeNull();
   });
 
+  it('rejects a tampered expiry: a later time under the old signature', () => {
+    const [user, exp, sig] = signState('u1', secret, now).split('.');
+    const later = String(Number(exp) + 60 * 60_000);
+    expect(verifyState([user, later, sig].join('.'), secret, now)).toBeNull();
+    // Sanity: the untouched state still verifies, so the null above is the signature check.
+    expect(verifyState([user, exp, sig].join('.'), secret, now)).toEqual({ userId: 'u1' });
+  });
+
+  it('round-trips a user id that contains dots', () => {
+    expect(verifyState(signState('a.b.c', secret, now), secret, now)).toEqual({ userId: 'a.b.c' });
+  });
+
   it('returns null for malformed input without throwing', () => {
     for (const bad of ['', 'abc', 'a.b', 'a.b.c', 'a.notanumber.zz', '...', 'u1.9999999999999.' ]) {
       expect(verifyState(bad, secret, now)).toBeNull();

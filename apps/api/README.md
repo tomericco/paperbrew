@@ -103,8 +103,10 @@ create extension if not exists pg_net;
 Then schedule the call, with your real `CRON_SECRET` in place of `<CRON_SECRET>`:
 
 ```sql
-select cron.schedule('paperbrew-tick', '5 * * * *', $$ select net.http_get(url := 'https://paperbrew-api.vercel.app/cron/tick', headers := jsonb_build_object('Authorization', 'Bearer <CRON_SECRET>')) $$);
+select cron.schedule('paperbrew-tick', '5 * * * *', $$ select net.http_get(url := 'https://paperbrew-api.vercel.app/cron/tick', headers := jsonb_build_object('Authorization', 'Bearer <CRON_SECRET>'), timeout_milliseconds := 300000) $$);
 ```
+
+The route answers only after it has run the due jobs (up to about 50 s, and a long job can go past that), while `pg_net` gives up after 5 s by default, so the schedule sets `timeout_milliseconds := 300000` (the 300 s limit of a Vercel function).
 
 The secret lives inside that SQL (in `cron.job`), so never commit the filled-in statement anywhere.
 
@@ -113,8 +115,11 @@ Check it, and remove it:
 ```sql
 select * from cron.job;
 select * from cron.job_run_details order by start_time desc limit 5;
+select status_code, content, created from net._http_response order by created desc limit 5;
 select cron.unschedule('paperbrew-tick');
 ```
+
+`cron.job_run_details` only shows that the request was queued. `net._http_response` is what shows whether the API answered: look for `status_code` 200. A 401 means the `CRON_SECRET` in the schedule does not match the one set on the API. (`pg_net` keeps these responses for a few hours only.)
 
 ### Gmail setup (Google Cloud)
 
