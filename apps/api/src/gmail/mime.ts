@@ -159,3 +159,8 @@ export function decodeBody(payload: GmailPart): { html: string; text: string } {
   const finalText: string = text ?? (finalHtml ? htmlToText(finalHtml) : '');
   return { html: finalHtml, text: finalText };
 }
+
+/** Postgres text columns reject the NUL character, so it is dropped from anything stored. */
+export function stripNul(s: string): string {
+  return s.replace(/\u0000/g, '');
+}

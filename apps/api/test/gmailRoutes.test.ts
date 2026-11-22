@@ -240,6 +240,28 @@ describe('GET /me/gmail', () => {
     expect(String(recentCall[0])).toMatch(/limit 20/);
     expect(recentCall[1]).toEqual(['user-1']);
   });
+
+  it('leaves not-a-list skips out of the recent decisions', async () => {
+    await gmail.request('/me/gmail', SIGNED_IN);
+    query.mockImplementation(async (sql: string) =>
+      /from gmail_connections/.test(sql)
+        ? { rows: [{ google_email: 'me@gmail.com', status: 'active', last_synced_at: null }] }
+        : { rows: [] });
+    await gmail.request('/me/gmail', SIGNED_IN);
+    const recentCall = query.mock.calls.find(([sql]) => /from gmail_messages/.test(String(sql)))!;
+    expect(String(recentCall[0]).replace(/\s+/g, ' ')).toContain("reason is distinct from 'not-a-list'");
+  });
+
+  it('is never cached: it holds the address and mail subjects', async () => {
+    const notConnected = await gmail.request('/me/gmail', SIGNED_IN);
+    expect(notConnected.headers.get('cache-control')).toBe('private, no-store');
+    query.mockImplementation(async (sql: string) =>
+      /from gmail_connections/.test(sql)
+        ? { rows: [{ google_email: 'me@gmail.com', status: 'active', last_synced_at: null }] }
+        : { rows: [] });
+    const connected = await gmail.request('/me/gmail', SIGNED_IN);
+    expect(connected.headers.get('cache-control')).toBe('private, no-store');
+  });
 });
 
 describe('DELETE /me/gmail', () => {

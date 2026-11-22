@@ -126,8 +126,9 @@ describe('connection and auth', () => {
     });
     await expect(syncGmail('user-1', { gmail, classify: classifyYes })).resolves.toEqual({ seen: 0, saved: 0 });
     const [sql, params] = poolCalls(/update gmail_connections set status = 'needs_reconnect'/)[0];
-    expect(sql.replace(/\s+/g, ' ')).toContain('last_error = $2 where user_id = $1');
-    expect(params).toEqual(['user-1', 'Google rejected the grant']);
+    // Guarded by the token the sync started with: a reconnect during the run is not flagged.
+    expect(sql.replace(/\s+/g, ' ')).toContain('last_error = $2 where user_id = $1 and refresh_token_enc = $3');
+    expect(params).toEqual(['user-1', 'Google rejected the grant', connection!.refresh_token_enc]);
     expect(gmail.listHistory).not.toHaveBeenCalled();
   });
 
@@ -172,7 +173,7 @@ describe('finding the messages', () => {
     await syncGmail('user-1', { gmail, classify: classifyYes });
     expect(gmail.listMessages).toHaveBeenCalledWith('access-1', QUERY, 200);
     expect(gmail.getProfile).toHaveBeenCalledWith('access-1');
-    expect(historyUpdates()[0][1]).toEqual(['user-1', '9000']);
+    expect(historyUpdates()[0][1]).toEqual(['user-1', '9000', connection!.refresh_token_enc]);
   });
 
   it('drops ids already in gmail_messages, scoped to the user', async () => {
@@ -202,7 +203,8 @@ describe('deciding each message', () => {
     });
     await expect(syncGmail('user-1', { gmail, classify: classifyYes })).resolves.toEqual({ seen: 1, saved: 0 });
     expect(gmail.getMessage).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), 'full');
-    expect(recorded()).toEqual([['user-1', 'm1', 'rule_skip', 'not-a-list', 'bob@x.example', 'Lunch?']]);
+    // Mail that is not a list is not ours to show: its subject and sender are not stored.
+    expect(recorded()).toEqual([['user-1', 'm1', 'rule_skip', 'not-a-list', null, null]]);
     expect(classifyYes).not.toHaveBeenCalled();
   });
 
@@ -334,12 +336,89 @@ describe('deciding each message', () => {
   });
 });
 
+describe('a message that keeps failing', () => {
+  const ids = ['m1', 'm2', 'm3', 'm4', 'm5'];
+  const failing = (failIds: string[]) =>
+    fakeGmail({
+      listHistory: vi.fn(async () => ({ messageIds: ids, historyId: '5000' })),
+      getMessage: vi.fn(async (_t: string, id: string, format: 'metadata' | 'full') => {
+        if (failIds.includes(id)) throw new Error(`Gmail messages request returned 500 for ${id}`);
+        return format === 'metadata' ? meta(id, LIST_HEADERS) : full(id, LIST_HEADERS, LONG_HTML);
+      }),
+    });
+
+  it('propagates the error on a normal attempt (lastAttempt defaults to false)', async () => {
+    await expect(syncGmail('user-1', { gmail: failing(['m2']), classify: classifyYes })).rejects.toThrow('returned 500');
+    expect(historyUpdates()).toHaveLength(0);
+  });
+
+  it('on the last attempt records it as rule_skip "error", carries on and advances history_id', async () => {
+    const result = await syncGmail('user-1', { gmail: failing(['m2']), classify: classifyYes, lastAttempt: true });
+    expect(result).toEqual({ seen: 5, saved: 4 });
+    expect(recorded()).toContainEqual(['user-1', 'm2', 'rule_skip', 'error', null, null]);
+    const errorInsert = poolCalls(/insert into gmail_messages/).find((c) => (c[1] as unknown[])[1] === 'm2')!;
+    expect(sqlOf(errorInsert)).toContain('on conflict (user_id, gmail_message_id) do nothing');
+    expect(historyUpdates()).toHaveLength(1);
+  });
+
+  it('on the last attempt, stops and rethrows after 3 consecutive failures, leaving history_id alone', async () => {
+    await expect(
+      syncGmail('user-1', { gmail: failing(['m1', 'm2', 'm3']), classify: classifyYes, lastAttempt: true }),
+    ).rejects.toThrow('returned 500 for m3');
+    const errors = recorded().filter((r) => r[3] === 'error');
+    expect(errors.map((r) => r[1])).toEqual(['m1', 'm2']);
+    expect(historyUpdates()).toHaveLength(0);
+  });
+
+  it('on the last attempt, a success in between resets the count of consecutive failures', async () => {
+    const gmail = failing(['m1', 'm2', 'm4', 'm5']);
+    await expect(syncGmail('user-1', { gmail, classify: classifyYes, lastAttempt: true })).resolves.toEqual({
+      seen: 5,
+      saved: 1,
+    });
+    expect(recorded().filter((r) => r[3] === 'error')).toHaveLength(4);
+    expect(historyUpdates()).toHaveLength(1);
+  });
+
+  it('on the last attempt, an auth error is not skipped: the connection is flagged', async () => {
+    const gmail = fakeGmail({
+      getMessage: vi.fn(async () => {
+        throw new GmailAuthError();
+      }),
+    });
+    await expect(syncGmail('user-1', { gmail, classify: classifyYes, lastAttempt: true })).resolves.toBeDefined();
+    expect(poolCalls(/needs_reconnect/)).toHaveLength(1);
+    expect(recorded()).toHaveLength(0);
+  });
+});
+
+describe('NUL bytes', () => {
+  it('are stripped from the subject, sender, html and text before anything is stored', async () => {
+    const headers = { ...LIST_HEADERS, Subject: 'Weekly\u0000 Digest', From: 'Jane <jane@news.example>' };
+    const gmail = fakeGmail({
+      getMessage: vi.fn(async (_t: string, id: string, format: 'metadata' | 'full') =>
+        format === 'metadata' ? meta(id, headers) : full(id, headers, `<p>Hel\u0000lo</p>${LONG_HTML}`)),
+    });
+    await syncGmail('user-1', { gmail, classify: classifyYes });
+    const arg = (classifyYes.mock.calls[0] as unknown as [{ subject: string; html: string; text: string }])[0];
+    expect(arg.subject).toBe('Weekly Digest');
+    expect(arg.html).not.toContain('\u0000');
+    expect(arg.text).not.toContain('\u0000');
+    const extractArg = extractNewsletter.mock.calls[0][0] as { html: string; text: string; title: string };
+    expect(extractArg.html + extractArg.text + extractArg.title).not.toContain('\u0000');
+    expect(JSON.stringify(recorded())).not.toContain('\\u0000');
+    expect(recorded()[0][5]).toBe('Weekly Digest');
+  });
+});
+
 describe('advancing history_id', () => {
   it('advances history_id and last_synced_at once every message was recorded', async () => {
     await syncGmail('user-1', { gmail: fakeGmail(), classify: classifyYes });
     const [sql, params] = historyUpdates()[0];
-    expect(sql.replace(/\s+/g, ' ')).toContain('set history_id = $2, last_synced_at = now(), last_error = null where user_id = $1');
-    expect(params).toEqual(['user-1', '5000']);
+    expect(sql.replace(/\s+/g, ' ')).toContain(
+      "set history_id = $2, last_synced_at = now(), last_error = null, status = 'active' where user_id = $1 and refresh_token_enc = $3",
+    );
+    expect(params).toEqual(['user-1', '5000', connection!.refresh_token_enc]);
   });
 
   it('processes only 200 of 250 new ids and leaves history_id unchanged', async () => {
@@ -354,7 +433,8 @@ describe('advancing history_id', () => {
     expect(historyUpdates()).toHaveLength(0);
     const [sql, params] = poolCalls(/update gmail_connections set last_synced_at/)[0];
     expect(sql).not.toMatch(/history_id/);
-    expect(params).toEqual(['user-1']);
+    expect(sql.replace(/\s+/g, ' ')).toContain('where user_id = $1 and refresh_token_enc = $2');
+    expect(params).toEqual(['user-1', connection!.refresh_token_enc]);
   });
 
   it('still resolves when the connection was deleted mid-sync (the final update hits 0 rows)', async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GmailMessage, GmailPart } from '../src/gmail/client.js';
-import { decodeBody, header } from '../src/gmail/mime.js';
+import { decodeBody, header, stripNul } from '../src/gmail/mime.js';
 
 const b64 = (s: string) => Buffer.from(s).toString('base64url');
 const part = (mimeType: string, data: string, extra: Partial<GmailPart> = {}): GmailPart => ({
@@ -170,5 +170,13 @@ describe('header', () => {
   it('returns null when absent or when headers are missing', () => {
     expect(header(msg, 'x-nope')).toBeNull();
     expect(header({ id: '2', payload: { mimeType: 'text/plain' } }, 'subject')).toBeNull();
+  });
+});
+
+describe('stripNul', () => {
+  it('removes NUL bytes, which Postgres text columns reject, and leaves other text alone', () => {
+    expect(stripNul('a\u0000b\u0000\u0000c')).toBe('abc');
+    expect(stripNul('Plain, with ünïcode and\nnewlines')).toBe('Plain, with ünïcode and\nnewlines');
+    expect(stripNul('')).toBe('');
   });
 });

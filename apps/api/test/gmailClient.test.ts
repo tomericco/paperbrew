@@ -213,6 +213,30 @@ describe('listHistory', () => {
     expect(new URL(fetchMock.mock.calls[1][0]).searchParams.get('pageToken')).toBe('p2');
   });
 
+  it('drops messages labelled SPAM, TRASH, DRAFT, SENT or CHAT', async () => {
+    const added = (id: string, labelIds?: string[]) => ({ message: { id, labelIds } });
+    fetchMock.mockResolvedValueOnce(
+      json({
+        history: [
+          {
+            messagesAdded: [
+              added('inbox', ['INBOX', 'UNREAD']),
+              added('spam', ['SPAM']),
+              added('trash', ['TRASH']),
+              added('draft', ['DRAFT']),
+              added('sent', ['SENT']),
+              added('chat', ['CHAT']),
+              added('mixed', ['INBOX', 'SPAM']),
+              added('nolabels'),
+            ],
+          },
+        ],
+        historyId: '300',
+      }),
+    );
+    await expect(listHistory('tok', '50')).resolves.toEqual({ messageIds: ['inbox', 'nolabels'], historyId: '300' });
+  });
+
   it('keeps the start id when Google returns no historyId and no history', async () => {
     fetchMock.mockResolvedValue(json({}));
     await expect(listHistory('tok', '50')).resolves.toEqual({ messageIds: [], historyId: '50' });

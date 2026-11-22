@@ -112,10 +112,13 @@ export function getProfile(accessToken: string): Promise<{ emailAddress: string;
 }
 
 type HistoryPage = {
-  history?: { messagesAdded?: { message: { id: string } }[] }[];
+  history?: { messagesAdded?: { message: { id: string; labelIds?: string[] } }[] }[];
   nextPageToken?: string;
   historyId?: string;
 };
+
+/** Mail that is not incoming mail for reading: never looked at, to match the fallback query. */
+const EXCLUDED_LABELS = new Set(['SPAM', 'TRASH', 'DRAFT', 'SENT', 'CHAT']);
 
 export async function listHistory(
   accessToken: string,
@@ -128,7 +131,11 @@ export async function listHistory(
     const params = new URLSearchParams({ startHistoryId, historyTypes: 'messageAdded' });
     if (pageToken) params.set('pageToken', pageToken);
     const page = await gmailGet<HistoryPage>(accessToken, '/history', params);
-    for (const h of page.history ?? []) for (const added of h.messagesAdded ?? []) ids.add(added.message.id);
+    for (const h of page.history ?? []) {
+      for (const { message } of h.messagesAdded ?? []) {
+        if (!message.labelIds?.some((l) => EXCLUDED_LABELS.has(l))) ids.add(message.id);
+      }
+    }
     if (page.historyId) historyId = page.historyId;
     pageToken = page.nextPageToken;
   } while (pageToken);

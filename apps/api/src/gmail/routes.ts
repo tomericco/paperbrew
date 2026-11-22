@@ -71,6 +71,8 @@ gmail.get('/gmail/callback', async (c) => {
 
 gmail.get('/me/gmail', async (c) => {
   const userId = c.get('userId');
+  // The answer holds the address and mail subjects: never kept by a browser or a proxy.
+  c.header('Cache-Control', 'private, no-store');
   const { rows } = await pool.query<{ google_email: string; status: string; last_synced_at: Date | null }>(
     'select google_email, status, last_synced_at from gmail_connections where user_id = $1',
     [userId],
@@ -86,7 +88,7 @@ gmail.get('/me/gmail', async (c) => {
     seen_at: Date;
   }>(
     `select from_email, subject, decision, reason, seen_at
-     from gmail_messages where user_id = $1
+     from gmail_messages where user_id = $1 and reason is distinct from 'not-a-list'
      order by seen_at desc limit 20`,
     [userId],
   );

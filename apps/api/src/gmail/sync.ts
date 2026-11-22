@@ -7,14 +7,19 @@ import * as realGmail from './client.js';
 import { GmailAuthError, HistoryExpiredError } from './client.js';
 import { classifyEmail } from './classify.js';
 import { decryptToken } from './crypto.js';
-import { decodeBody, header } from './mime.js';
+import { decodeBody, header, stripNul } from './mime.js';
 import { passesBodyRules, passesMetadataRules, senderEmail } from './rules.js';
 
 export const MAX_PER_SYNC = 200;
 export const FALLBACK_QUERY = 'newer_than:2d -in:sent -in:chats -in:drafts';
 
 type Decision = 'rule_skip' | 'not_editorial' | 'editorial';
-type Deps = { gmail?: typeof import('./client.js'); classify?: typeof classifyEmail };
+type Deps = {
+  gmail?: typeof import('./client.js');
+  classify?: typeof classifyEmail;
+  /** The runner's final try: a message that still fails is recorded as skipped so the sync can move on. */
+  lastAttempt?: boolean;
+};
 type Stats = { seen: number; saved: number };
 
 const RECORD_SQL = `insert into gmail_messages (user_id, gmail_message_id, decision, reason, from_email, subject)
@@ -28,10 +33,15 @@ function recordParams(userId: string, id: string, decision: Decision, reason: st
 /** A message deleted between listing and fetching comes back as a plain 404 error. */
 const isGone = (err: unknown) => err instanceof Error && /\b404\b/.test(err.message);
 
+/** On the last attempt, this many failures in a row mean something systemic: stop rather than skip mail. */
+const MAX_CONSECUTIVE_FAILURES = 3;
+
 /**
  * Look at the user's new Gmail messages once each and keep the editorial newsletters as articles.
  * A GmailAuthError (revoked access) is handled here: the connection is flagged and the job finishes.
  * Any other error propagates so the runner retries; messages already recorded stay recorded.
+ * On the last attempt a message that keeps failing is recorded as skipped ("error") and the sync carries
+ * on, so one bad message cannot hold back every later one; after 3 failures in a row the error propagates.
  */
 export async function syncGmail(userId: string, deps: Deps = {}): Promise<Stats> {
   const { rows } = await pool.query<{ refresh_token_enc: string; history_id: string }>(
@@ -45,12 +55,23 @@ export async function syncGmail(userId: string, deps: Deps = {}): Promise<Stats>
   const refreshToken = decryptToken(conn.refresh_token_enc, config.GMAIL_TOKEN_KEY);
 
   try {
-    await run(userId, refreshToken, conn.history_id, deps.gmail ?? realGmail, deps.classify ?? classifyEmail, stats);
+    await run(
+      userId,
+      conn.refresh_token_enc,
+      refreshToken,
+      conn.history_id,
+      deps.gmail ?? realGmail,
+      deps.classify ?? classifyEmail,
+      deps.lastAttempt ?? false,
+      stats,
+    );
   } catch (err) {
     if (!(err instanceof GmailAuthError)) throw err;
+    // Guarded by the token this run started with: a reconnect meanwhile is a new connection, not this one.
     await pool.query(
-      `update gmail_connections set status = 'needs_reconnect', last_error = $2 where user_id = $1`,
-      [userId, err.message],
+      `update gmail_connections set status = 'needs_reconnect', last_error = $2
+       where user_id = $1 and refresh_token_enc = $3`,
+      [userId, err.message, conn.refresh_token_enc],
     );
   }
   return stats;
@@ -58,10 +79,12 @@ export async function syncGmail(userId: string, deps: Deps = {}): Promise<Stats>
 
 async function run(
   userId: string,
+  tokenEnc: string,
   refreshToken: string,
   startHistoryId: string,
   gmail: typeof import('./client.js'),
   classify: typeof classifyEmail,
+  lastAttempt: boolean,
   stats: Stats,
 ): Promise<void> {
   const token = await gmail.refreshAccessToken(refreshToken);
@@ -91,19 +114,34 @@ async function run(
   );
   const blocked = new Set(blockedRows.map((r) => r.email));
 
+  let failuresInARow = 0;
   for (const id of batch) {
     stats.seen++;
-    if (await processMessage(userId, token, id, gmail, classify, blocked)) stats.saved++;
+    try {
+      if (await processMessage(userId, token, id, gmail, classify, blocked)) stats.saved++;
+      failuresInARow = 0;
+    } catch (err) {
+      // An auth error is about the connection, not the message: the caller handles it.
+      if (!lastAttempt || err instanceof GmailAuthError) throw err;
+      if (++failuresInARow >= MAX_CONSECUTIVE_FAILURES) throw err;
+      console.warn(`[gmail] skipping message after repeated failures: ${(err as Error).message}`);
+      await pool.query(RECORD_SQL, recordParams(userId, id, 'rule_skip', 'error', null, null));
+    }
   }
 
   // Only after every message was recorded; with more left over, the next sync starts from the same
-  // history_id and skips what is already recorded.
+  // history_id and skips what is already recorded. Guarded by the token this run started with, so a run
+  // that began before a disconnect and reconnect cannot write an older history_id to the new connection.
   if (fresh.length > MAX_PER_SYNC) {
-    await pool.query('update gmail_connections set last_synced_at = now() where user_id = $1', [userId]);
+    await pool.query('update gmail_connections set last_synced_at = now() where user_id = $1 and refresh_token_enc = $2', [
+      userId,
+      tokenEnc,
+    ]);
   } else {
     await pool.query(
-      'update gmail_connections set history_id = $2, last_synced_at = now(), last_error = null where user_id = $1',
-      [userId, nextHistoryId],
+      `update gmail_connections set history_id = $2, last_synced_at = now(), last_error = null, status = 'active'
+       where user_id = $1 and refresh_token_enc = $3`,
+      [userId, nextHistoryId, tokenEnc],
     );
   }
 }
@@ -128,8 +166,8 @@ async function processMessage(
     await skip('rule_skip', 'gone', null, null);
     return false;
   }
-  const from = header(metaMsg, 'from') ?? '';
-  const subject = header(metaMsg, 'subject') ?? '';
+  const from = stripNul(header(metaMsg, 'from') ?? '');
+  const subject = stripNul(header(metaMsg, 'subject') ?? '');
   const fromEmail = senderEmail(from);
 
   const metaCheck = passesMetadataRules(
@@ -137,7 +175,9 @@ async function processMessage(
     blocked,
   );
   if (!metaCheck.ok) {
-    await skip('rule_skip', metaCheck.reason, fromEmail, subject);
+    // Mail that is not a list is none of our business: keep nothing but the fact that it was seen.
+    const keep = metaCheck.reason !== 'not-a-list';
+    await skip('rule_skip', metaCheck.reason, keep ? fromEmail : null, keep ? subject : null);
     return false;
   }
 
@@ -149,7 +189,8 @@ async function processMessage(
     await skip('rule_skip', 'gone', fromEmail, subject);
     return false;
   }
-  const body = decodeBody(fullMsg.payload);
+  const decoded = decodeBody(fullMsg.payload);
+  const body = { html: stripNul(decoded.html), text: stripNul(decoded.text) };
   const bodyCheck = passesBodyRules(body);
   if (!bodyCheck.ok) {
     await skip('rule_skip', bodyCheck.reason, fromEmail, subject);
@@ -163,7 +204,7 @@ async function processMessage(
   }
 
   const title = cleanSubject(subject);
-  const messageId = header(fullMsg, 'message-id')?.trim() || null;
+  const messageId = stripNul(header(fullMsg, 'message-id') ?? '').trim() || null;
   if (await findDuplicateNewsletter(pool, userId, { messageId, title }, 'gmail')) {
     await skip('rule_skip', 'duplicate', fromEmail, subject);
     return false;

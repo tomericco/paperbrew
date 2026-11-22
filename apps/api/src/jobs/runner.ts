@@ -12,7 +12,7 @@ export async function runOne(): Promise<boolean> {
   try {
     if (job.type === 'process_email') await processEmail(job.payload.id);
     else if (job.type === 'fetch_article') await fetchArticle(job.payload.id, job.attempts >= job.max_attempts);
-    else if (job.type === 'gmail_sync') await syncGmail(job.payload.id);
+    else if (job.type === 'gmail_sync') await syncGmail(job.payload.id, { lastAttempt: job.attempts >= job.max_attempts });
     else throw new Error(`Unknown job type ${job.type}`);
     await complete(pool, job.id);
   } catch (err) {
