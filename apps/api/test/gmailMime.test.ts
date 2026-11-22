@@ -67,6 +67,89 @@ describe('decodeBody', () => {
   });
 });
 
+const textOf = (html: string) => decodeBody(part('text/html', html)).text;
+
+describe('html to text: linear time on hostile input', () => {
+  const cases: [string, string, string][] = [
+    ['many bare <', 'x' + '<'.repeat(500_000), 'x' + '<'.repeat(500_000)],
+    ['many unclosed tag openers', 'x<a'.repeat(160_000), 'x<a'.repeat(160_000)],
+    ['many unclosed <style>', 'x<style>'.repeat(70_000), 'x'],
+    ['many unclosed <script>', 'x<script>'.repeat(60_000), 'x'],
+    ['many unterminated comments', 'x<!--'.repeat(125_000), 'x'],
+  ];
+  it.each(cases)('%s finishes in under 300 ms', (_name, html, expected) => {
+    const start = performance.now();
+    const out = textOf(html);
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(300);
+    expect(out).toBe(expected);
+  }, 60_000);
+
+  it('keeps a bare < without a closing > as literal text', () => {
+    expect(textOf('<p>a < b</p><p>c <d')).toBe('a < b\nc <d');
+  });
+
+  it('drops the rest of the input after an unclosed script or style', () => {
+    expect(textOf('<p>keep</p><script>var a = 1; <p>gone</p>')).toBe('keep');
+    expect(textOf('<p>keep</p><style>p{} <p>gone</p>')).toBe('keep');
+  });
+});
+
+describe('html to text: entities', () => {
+  it.each([
+    ['&rsquo;', '’'],
+    ['&lsquo;', '‘'],
+    ['&ldquo;', '“'],
+    ['&rdquo;', '”'],
+    ['&mdash;', '—'],
+    ['&ndash;', '–'],
+    ['&hellip;', '…'],
+    ['&copy;', '©'],
+    ['&bull;', '•'],
+    ['&middot;', '·'],
+    ['&trade;', '™'],
+    ['&reg;', '®'],
+  ])('decodes %s', (entity, char) => {
+    expect(textOf(`<p>a${entity}b</p>`)).toBe(`a${char}b`);
+  });
+
+  it('removes zero-width entities and characters', () => {
+    expect(textOf('<p>a&zwnj;&zwj;b&#8203;c&#xFEFF;d⁠e</p>')).toBe('abcde');
+  });
+
+  it('does not double-decode', () => {
+    expect(textOf('<p>&amp;lt;</p>')).toBe('&lt;');
+  });
+
+  it('leaves invalid or unknown entities literal', () => {
+    expect(textOf('<p>&#99999999; &#xD800; &bogus; AT&T</p>')).toBe('&#99999999; &#xD800; &bogus; AT&T');
+  });
+
+  it('collapses nbsp and U+00A0 runs to a single space', () => {
+    expect(textOf('<p>a&nbsp;&#160;&nbsp; b&zwnj;&nbsp;&zwnj;&nbsp;c</p>')).toBe('a b c');
+  });
+});
+
+describe('html to text: comments and scripts', () => {
+  it('removes comments, including ones containing >', () => {
+    expect(textOf('<p>a<!-- x > y --> b</p>')).toBe('a b');
+    expect(textOf('<!-- one --><p>a</p><!--\nmulti\nline\n--><p>b</p>')).toBe('a\nb');
+  });
+
+  it('drops the rest after an unterminated comment', () => {
+    expect(textOf('<p>keep</p><!-- never closed <p>gone</p>')).toBe('keep');
+  });
+
+  it('drops a multi-line script with attributes and ignores case', () => {
+    const html = '<p>a</p><SCRIPT type="text/javascript" src="x.js">\nif (a < b) { go(); }\n</Script ><p>b</p>';
+    expect(textOf(html)).toBe('a\nb');
+  });
+
+  it('drops head contents and doctype', () => {
+    expect(textOf('<!DOCTYPE html><html><head><title>T</title></head><body><p>x</p></body></html>')).toBe('x');
+  });
+});
+
 describe('header', () => {
   const msg: GmailMessage = {
     id: '1',
