@@ -8,6 +8,7 @@ export type Article = {
   sourceUrl: string | null;
   status: 'pending' | 'ready' | 'failed';
   wordCount: number | null;
+  addedVia: 'email' | 'web' | 'gmail';
   createdAt: string;
 };
 
@@ -34,12 +35,18 @@ export function articleMeta(article: Article): ReactNode {
   if (article.wordCount) parts.push(`${Math.max(1, Math.round(article.wordCount / 230))} min read`);
   parts.push(new Date(article.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
   if (STATUS[article.status]) parts.push(STATUS[article.status]);
-  return parts.map((part, i) => (
-    <span key={i}>
-      {i > 0 && ' · '}
-      {part}
-    </span>
-  ));
+  return (
+    <>
+      {/* First, so the narrow row's ellipsis never hides it. */}
+      {article.addedVia === 'gmail' && <span className="tag">Gmail</span>}
+      {parts.map((part, i) => (
+        <span key={i}>
+          {i > 0 && ' · '}
+          {part}
+        </span>
+      ))}
+    </>
+  );
 }
 
 /** The article's title, linking to its source when it has one. */

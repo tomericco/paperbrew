@@ -732,6 +732,202 @@ button:disabled {
   gap: 8px;
 }
 
+/* Gmail tag in an article's details line. */
+
+.tag {
+  padding: 1px 6px;
+  border: 1px solid #e6e6e6;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #444;
+  margin-right: 6px;
+}
+
+/* Settings: a stack of sections, each a heading over its controls. */
+
+.settings {
+  max-width: 44rem;
+}
+
+.settings h1 {
+  margin: 8px 0 16px;
+}
+
+.settings .muted {
+  color: #6b6b6b;
+}
+
+.settings .error {
+  color: #b00020;
+}
+
+/* Always present, so a notice added later is announced. */
+.settings-status {
+  margin: 0;
+}
+
+.notice {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  background: #f5f2ec;
+  border-radius: 4px;
+}
+
+.settings-section {
+  padding: 20px 0 8px;
+  border-top: 1px solid #e6e6e6;
+}
+
+.settings-section h2 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.settings-section h3 {
+  margin: 20px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b6b6b;
+}
+
+.settings-section p {
+  margin: 0 0 12px;
+}
+
+.choices {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid #e6e6e6;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.choice:has(input:checked) {
+  border-color: #111;
+}
+
+.choice:has(input:focus-visible) {
+  outline: 2px solid #111;
+  outline-offset: 2px;
+}
+
+.choice input {
+  margin: 4px 0 0;
+  accent-color: #111;
+}
+
+.choice-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.choice-label {
+  font-weight: 600;
+}
+
+.choice-hint {
+  font-size: 14px;
+  color: #6b6b6b;
+}
+
+.gmail-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.gmail-who {
+  display: grid;
+  min-width: 0;
+}
+
+.gmail-address {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.warning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid #111;
+  border-radius: 4px;
+}
+
+.decisions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.decision {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid #e6e6e6;
+  border-radius: 4px;
+}
+
+.decision .badge {
+  flex: none;
+  min-width: 4.5rem;
+  margin-top: 2px;
+  padding: 1px 8px;
+  border: 1px solid #e6e6e6;
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: center;
+  color: #6b6b6b;
+}
+
+.decision .badge-kept {
+  border-color: #111;
+  background: #111;
+  color: #fff;
+}
+
+.decision-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.decision-subject {
+  overflow-wrap: anywhere;
+}
+
+.decision-from,
+.decision-reason {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
 /* Phones and other touch screens. Every page is built phone-first: check new UI at 375px wide. */
 
 @media (pointer: coarse) {
