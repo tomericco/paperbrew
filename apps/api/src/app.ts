@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { pool } from './db/client.js';
 import { enqueue } from './jobs/queue.js';
 import { drain } from './jobs/runner.js';
+import { tick } from './cron/tick.js';
 import { normalizePostmark } from './inbound/postmark.js';
 import { normalizeCloudmailin } from './inbound/cloudmailin.js';
 import type { InboundEmail } from './inbound/types.js';
@@ -127,6 +128,15 @@ app.get('/cron/run-jobs', async (c) => {
   if (!secret || c.req.header('authorization') !== `Bearer ${secret}`) return c.json({ ok: false }, 401);
   const ran = await drain(DRAIN);
   return c.json({ ok: true, ran });
+});
+
+// Hourly (Supabase pg_cron, see README): queue a gmail_sync per active connection, then run what's due.
+app.get('/cron/tick', async (c) => {
+  const secret = config.CRON_SECRET;
+  if (!secret || c.req.header('authorization') !== `Bearer ${secret}`) return c.json({ ok: false }, 401);
+  const queued = await tick();
+  const ran = await drain(DRAIN);
+  return c.json({ ok: true, ...queued, ran });
 });
 
 // Spike: proves the zero-shot model loads and runs inside a Vercel function.

@@ -85,6 +85,47 @@ The API runs as one Vercel Node.js function (`api/index.ts`); `vercel.json` rout
 - `BETTER_AUTH_SECRET` (32+ chars) and `BETTER_AUTH_URL` (the **web** origin, e.g. `https://paperbrew-web.vercel.app`)
 - Sign-in providers, each enabled only when both are set: `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET`, `REDDIT_CLIENT_ID`/`_SECRET`. Callback URLs are `$BETTER_AUTH_URL/api/auth/callback/{google|github|reddit}`.
 
+## Hourly tick (Supabase)
+
+### What the tick does
+
+Every hour Supabase calls `GET /cron/tick`. It queues a `gmail_sync` job for every active Gmail connection that doesn't already have one waiting, then runs the jobs that are due. The daily Vercel cron (`/cron/run-jobs`) stays as a safety net for anything left over. Both endpoints need `Authorization: Bearer $CRON_SECRET` and answer 401 without it.
+
+### Schedule it
+
+Vercel Hobby crons run once a day, so the hourly schedule lives in Supabase. In the Supabase SQL editor:
+
+```sql
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+```
+
+Then schedule the call, with your real `CRON_SECRET` in place of `<CRON_SECRET>`:
+
+```sql
+select cron.schedule('paperbrew-tick', '5 * * * *', $$ select net.http_get(url := 'https://paperbrew-api.vercel.app/cron/tick', headers := jsonb_build_object('Authorization', 'Bearer <CRON_SECRET>')) $$);
+```
+
+The secret lives inside that SQL (in `cron.job`), so never commit the filled-in statement anywhere.
+
+Check it, and remove it:
+
+```sql
+select * from cron.job;
+select * from cron.job_run_details order by start_time desc limit 5;
+select cron.unschedule('paperbrew-tick');
+```
+
+### Gmail setup (Google Cloud)
+
+1. Enable the **Gmail API** in the Google Cloud project that owns the sign-in OAuth client.
+2. On the OAuth consent screen, add the scope `https://www.googleapis.com/auth/gmail.readonly`.
+3. On the existing OAuth client, add these authorized redirect URIs: `https://<web origin>/api/gmail/callback` and, for local dev, `http://localhost:5173/api/gmail/callback`.
+4. While the app is in **Testing**, add yourself under **Test users**. Until Google verifies the app, only test users (up to 100) can connect. Testing mode also ends each connection after 7 days; Settings then shows "Reconnect Gmail". An Internal consent screen (Workspace projects) or publishing the app unverified avoids that. Unverified apps are capped at 100 users and show Google's warning screen.
+5. Set the new env var `GMAIL_TOKEN_KEY` (encrypts the stored refresh tokens). Generate it with `openssl rand -base64 32`.
+
+Gmail features appear only when `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GMAIL_TOKEN_KEY` are all set.
+
 ## Security notes
 
 - **Addresses are secret.** Tokens are three random words, so anyone who knows an address can add to that library. Set `REQUIRE_KNOWN_SENDER=true` to accept only the account email and verified aliases (`sender_aliases`). To rotate an address, set `disabled_at` and issue a new token.
@@ -96,8 +137,10 @@ The API runs as one Vercel Node.js function (`api/index.ts`); `vercel.json` rout
 
 ```
 src/
-  app.ts                  Hono app: inbound webhooks, health, cron, auth, library and brew routes
+  app.ts                  Hono app: inbound webhooks, health, cron, auth, library, brew and gmail routes
   auth/                   Better Auth setup, enabled providers, user provisioning
+  gmail/                  Gmail newsletters: connect, token storage, sync, classifier
+  cron/tick.ts            hourly tick: queues a gmail_sync per active connection
   routes/library.ts       /me, /me/address, /articles (signed-in user)
   brew/                   GET /brew: articles to a PDF magazine
   server.ts               local server (npm run dev)
