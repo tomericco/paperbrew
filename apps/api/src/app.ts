@@ -144,9 +144,14 @@ app.get('/cron/model-check', async (c) => {
   const secret = config.CRON_SECRET;
   if (!secret || c.req.header('authorization') !== `Bearer ${secret}`) return c.json({ ok: false }, 401);
   const t0 = Date.now();
-  const { labels } = await zeroShot('Our spring sale: 30% off every plan this weekend only.', [
-    'an essay, analysis or reporting',
-    'a sales promotion or discount',
-  ]);
-  return c.json({ ok: true, model: MODEL_ID, top: labels[0], ms: Date.now() - t0 });
+  try {
+    const { labels } = await zeroShot('Our spring sale: 30% off every plan this weekend only.', [
+      'an essay, analysis or reporting',
+      'a sales promotion or discount',
+    ]);
+    return c.json({ ok: true, model: MODEL_ID, top: labels[0], ms: Date.now() - t0 });
+  } catch (err) {
+    // The message only: it says why the model did not load without a stack or any secret.
+    return c.json({ ok: false, error: err instanceof Error ? err.message : 'model check failed' }, 500);
+  }
 });

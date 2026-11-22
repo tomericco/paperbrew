@@ -1,5 +1,9 @@
 // MNLI-tuned model, quantized ONNX weights (see the Task 1 report for size and timings).
 export const MODEL_ID = 'Xenova/nli-deberta-v3-xsmall';
+// Pinned so a change upstream cannot alter what gets classified (commit of 2025-07-14).
+export const MODEL_REVISION = '2a4f614a701367a02d51389039afc998faeda637';
+// A hung download must fail the sync, not hold the function until the platform kills it.
+export const LOAD_TIMEOUT_MS = 60_000;
 
 export type ZeroShotResult = { labels: string[]; scores: number[] };
 
@@ -13,12 +17,23 @@ async function build(): Promise<Classifier> {
   // Vercel's filesystem is read-only except /tmp.
   if (process.env.VERCEL) env.cacheDir = '/tmp/transformers-cache';
   env.allowLocalModels = false;
-  return (await pipeline('zero-shot-classification', MODEL_ID, { dtype: 'q8' })) as unknown as Classifier;
+  return (await pipeline('zero-shot-classification', MODEL_ID, { dtype: 'q8', revision: MODEL_REVISION })) as unknown as Classifier;
+}
+
+function buildWithTimeout(): Promise<Classifier> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`Loading the model timed out after ${LOAD_TIMEOUT_MS / 1000} s`)),
+      LOAD_TIMEOUT_MS,
+    );
+  });
+  return Promise.race([build(), timeout]).finally(() => clearTimeout(timer));
 }
 
 function load(): Promise<Classifier> {
   if (!classifier) {
-    const p = build();
+    const p = buildWithTimeout();
     // A failed load must not be cached: the next call retries.
     p.catch(() => {
       if (classifier === p) classifier = undefined;
