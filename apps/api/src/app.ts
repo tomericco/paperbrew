@@ -14,6 +14,7 @@ import { auth } from './auth/auth.js';
 import { enabledProviders } from './auth/providers.js';
 import { library } from './routes/library.js';
 import { brew } from './brew/route.js';
+import { gmail } from './gmail/routes.js';
 import { MODEL_ID, zeroShot } from './gmail/model.js';
 
 export const app = new Hono();
@@ -37,6 +38,9 @@ app.route('/', library);
 
 // GET /brew: the signed-in user's magazine as a PDF.
 app.route('/', brew);
+
+// Gmail newsletters: GET /gmail/connect, GET /gmail/callback, GET and DELETE /me/gmail.
+app.route('/', gmail);
 
 const webhookAuth = basicAuth({ username: config.INBOUND_WEBHOOK_USER, password: config.INBOUND_WEBHOOK_PASSWORD });
 
