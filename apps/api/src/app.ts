@@ -14,6 +14,7 @@ import { auth } from './auth/auth.js';
 import { enabledProviders } from './auth/providers.js';
 import { library } from './routes/library.js';
 import { brew } from './brew/route.js';
+import { MODEL_ID, zeroShot } from './gmail/model.js';
 
 export const app = new Hono();
 
@@ -122,4 +123,16 @@ app.get('/cron/run-jobs', async (c) => {
   if (!secret || c.req.header('authorization') !== `Bearer ${secret}`) return c.json({ ok: false }, 401);
   const ran = await drain(DRAIN);
   return c.json({ ok: true, ran });
+});
+
+// Spike: proves the zero-shot model loads and runs inside a Vercel function.
+app.get('/cron/model-check', async (c) => {
+  const secret = config.CRON_SECRET;
+  if (!secret || c.req.header('authorization') !== `Bearer ${secret}`) return c.json({ ok: false }, 401);
+  const t0 = Date.now();
+  const { labels } = await zeroShot('Our spring sale: 30% off every plan this weekend only.', [
+    'an essay, analysis or reporting',
+    'a sales promotion or discount',
+  ]);
+  return c.json({ ok: true, model: MODEL_ID, top: labels[0], ms: Date.now() - t0 });
 });
