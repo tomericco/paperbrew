@@ -20,9 +20,12 @@ const SHORT: Record<string, string> = {
 };
 
 const INPUT_WORDS = 400;
+/** Bounds sender-controlled text by characters: one huge token must not reach the tokenizer or detectScript. */
+export const CLASSIFIER_MAX_CHARS = 4000;
 
 export function classifierInput(subject: string, text: string): string {
-  return `${subject}\n${text.trim().split(/\s+/).slice(0, INPUT_WORDS).join(' ')}`;
+  const input = `${subject}\n${text.trim().split(/\s+/).slice(0, INPUT_WORDS).join(' ')}`;
+  return input.slice(0, CLASSIFIER_MAX_CHARS);
 }
 
 export function decide(result: { labels: string[]; scores: number[] }): { editorial: boolean; reason: string } {
@@ -41,7 +44,7 @@ export async function classifyEmail(
   infer: typeof zeroShot = zeroShot,
 ): Promise<{ editorial: boolean; reason: string }> {
   // The model is English-only, so Hebrew and Arabic mail passes on the rules alone.
-  if (detectScript(email.text || email.html) !== 'latin') {
+  if (detectScript((email.text || email.html).slice(0, CLASSIFIER_MAX_CHARS)) !== 'latin') {
     return { editorial: true, reason: 'rules-only (non-English)' };
   }
   return decide(await infer(classifierInput(email.subject, email.text), [...LABELS]));

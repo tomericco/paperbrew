@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { classifierInput, classifyEmail, decide, EDITORIAL_LABEL, LABELS } from '../src/gmail/classify.js';
+import { CLASSIFIER_MAX_CHARS, classifierInput, classifyEmail, decide, EDITORIAL_LABEL, LABELS } from '../src/gmail/classify.js';
 
 const [, PROMO, UPDATE, NOTIFICATION, LINKS] = LABELS;
 
@@ -43,6 +43,14 @@ describe('classifierInput', () => {
   });
 });
 
+describe('classifierInput bounds', () => {
+  it('never exceeds the character cap, even for one giant token, and keeps the subject', () => {
+    const out = classifierInput('Subject line', 'x'.repeat(500_000));
+    expect(out.length).toBeLessThanOrEqual(CLASSIFIER_MAX_CHARS);
+    expect(out.startsWith('Subject line\n')).toBe(true);
+  });
+});
+
 describe('classifyEmail', () => {
   const english = { subject: 'S', html: '<p>An essay about things.</p>', text: 'An essay about things.' };
 
@@ -71,5 +79,21 @@ describe('classifyEmail', () => {
   it('inference error propagates', async () => {
     const infer = vi.fn().mockRejectedValue(new Error('model down'));
     await expect(classifyEmail(english, infer)).rejects.toThrow('model down');
+  });
+
+  it('stays fast on a text made only of "<"', async () => {
+    const infer = vi.fn().mockResolvedValue({ labels: [EDITORIAL_LABEL], scores: [0.9] });
+    const start = performance.now();
+    await classifyEmail({ subject: 'x', html: '', text: '<'.repeat(500_000) }, infer);
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
+  it('detects the script from the head of a long Hebrew text and skips the model', async () => {
+    const infer = vi.fn();
+    const text = 'זהו מאמר ארוך על דברים '.repeat(1000);
+    expect(text.length).toBeGreaterThan(CLASSIFIER_MAX_CHARS);
+    const out = await classifyEmail({ subject: 'נושא', html: '', text }, infer);
+    expect(out).toEqual({ editorial: true, reason: 'rules-only (non-English)' });
+    expect(infer).not.toHaveBeenCalled();
   });
 });
