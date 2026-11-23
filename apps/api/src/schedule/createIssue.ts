@@ -29,6 +29,7 @@ const CANDIDATES_SQL = `
  */
 export async function createIssue(userId: string, now: Date = new Date()): Promise<{ issueId: string | null }> {
   const client = await pool.connect();
+  let rollbackFailed = false;
   try {
     await client.query('begin');
     const { rows: users } = await client.query<UserRow>(
@@ -63,14 +64,14 @@ export async function createIssue(userId: string, now: Date = new Date()): Promi
       issueId = ins.rows[0].id;
     }
     if (rolledOver.length > 0) {
-      await client.query('update articles set rollover_count = rollover_count + 1 where id = any($1::uuid[])', [
+      await client.query('update articles set rollover_count = rollover_count + 1 where id = any($1::uuid[]) and archived_at is null', [
         rolledOver,
       ]);
     }
     if (skipped.length > 0) {
       await client.query(
         `update articles set archived_at = now(), archive_reason = 'skipped', rollover_count = ${ROLLOVER_LIMIT}
-         where id = any($1::uuid[])`,
+         where id = any($1::uuid[]) and archived_at is null`,
         [skipped],
       );
     }
@@ -78,9 +79,11 @@ export async function createIssue(userId: string, now: Date = new Date()): Promi
     await client.query('commit');
     return { issueId };
   } catch (err) {
-    await client.query('rollback');
+    // A failed rollback must not hide the original error; a connection that could not roll back is destroyed.
+    rollbackFailed = !(await client.query('rollback').then(() => true, () => false));
     throw err;
   } finally {
-    client.release();
+    if (rollbackFailed) client.release(true);
+    else client.release();
   }
 }

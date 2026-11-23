@@ -129,6 +129,17 @@ describe('createIssue', () => {
     expect(skip[0][1]).toEqual([['a2']]);
   });
 
+  it('never touches an article archived by hand since the candidates were loaded', async () => {
+    candidates = [
+      { id: 'a1', reading_minutes: 40, rollover_count: 0 },
+      { id: 'a2', reading_minutes: 30, rollover_count: 1 },
+      { id: 'a3', reading_minutes: 5, rollover_count: 0 },
+    ];
+    await createIssue('u1', NOW);
+    expect(sqlOf(calls(/rollover_count = rollover_count \+ 1/)[0])).toContain('archived_at is null');
+    expect(sqlOf(calls(/archive_reason = 'skipped'/)[0])).toContain('archived_at is null');
+  });
+
   it('skips the rollover statements when nothing is left out', async () => {
     candidates = three();
     await createIssue('u1', NOW);
@@ -149,5 +160,33 @@ describe('createIssue', () => {
     expect(calls(/^rollback$/)).toHaveLength(1);
     expect(calls(/^commit$/)).toHaveLength(0);
     expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the original error and destroys the client when the rollback itself fails', async () => {
+    candidates = three();
+    clientQuery.mockImplementation(async (sql: string) => {
+      const s = sql.replace(/\s+/g, ' ');
+      if (/for update/.test(s)) return { rows: [user], rowCount: 1 };
+      if (/from articles a/.test(s)) return { rows: candidates, rowCount: 3 };
+      if (/insert into issues/.test(s)) throw new Error('boom');
+      if (s === 'rollback') throw new Error('connection lost');
+      return { rows: [], rowCount: 0 };
+    });
+    await expect(createIssue('u1', NOW)).rejects.toThrow('boom');
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(release.mock.calls[0][0]).toBeTruthy();
+  });
+
+  it('releases the client normally (no error argument) when the rollback works', async () => {
+    candidates = three();
+    clientQuery.mockImplementation(async (sql: string) => {
+      const s = sql.replace(/\s+/g, ' ');
+      if (/for update/.test(s)) return { rows: [user], rowCount: 1 };
+      if (/from articles a/.test(s)) return { rows: candidates, rowCount: 3 };
+      if (/insert into issues/.test(s)) throw new Error('boom');
+      return { rows: [], rowCount: 0 };
+    });
+    await expect(createIssue('u1', NOW)).rejects.toThrow('boom');
+    expect(release.mock.calls[0]).toEqual([]);
   });
 });
