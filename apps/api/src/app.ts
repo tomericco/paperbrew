@@ -18,6 +18,7 @@ import { brew } from './brew/route.js';
 import { gmail } from './gmail/routes.js';
 import { devices } from './print/devices.js';
 import { agent } from './print/agent.js';
+import { issues } from './print/issues.js';
 import { MODEL_ID, zeroShot } from './gmail/model.js';
 
 export const app = new Hono();
@@ -49,6 +50,9 @@ app.route('/', gmail);
 app.route('/', devices);
 // The Mac app claims queued issues and reports results; each route checks the device token itself.
 app.route('/', agent);
+
+// Issue history and print again: GET /me/issues, POST /me/issues/:id/reprint.
+app.route('/', issues);
 
 const webhookAuth = basicAuth({ username: config.INBOUND_WEBHOOK_USER, password: config.INBOUND_WEBHOOK_PASSWORD });
 

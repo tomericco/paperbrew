@@ -90,7 +90,7 @@ The API runs as one Vercel Node.js function (`api/index.ts`); `vercel.json` rout
 
 ### What the tick does
 
-Every hour Supabase calls `GET /cron/tick`. It queues a `gmail_sync` job for every active Gmail connection that doesn't already have one waiting. When `AUTOBREW_ENABLED=true` it also queues a `create_issue` job for every user whose brewing schedule has an open slot (a user who already has one waiting is skipped; `create_issue` re-checks the slot under a row lock and queues an issue of the oldest ready articles that fit the reading-time budget). Then it runs the jobs that are due. The daily Vercel cron (`/cron/run-jobs`) stays as a safety net for anything left over. Both endpoints need `Authorization: Bearer $CRON_SECRET` and answer 401 without it.
+Every hour Supabase calls `GET /cron/tick`. It queues a `gmail_sync` job for every active Gmail connection that doesn't already have one waiting. When `AUTOBREW_ENABLED=true` it also queues a `create_issue` job for every user whose brewing schedule has an open slot (a user who already has one waiting is skipped; `create_issue` re-checks the slot under a row lock and queues an issue of the oldest ready articles that fit the reading-time budget). Then it runs the jobs that are due. It also fails any issue stuck `printing` for over 30 minutes (`error = 'timed out'`, reported as `stale`), even with `AUTOBREW_ENABLED` off, so it can be printed again. The daily Vercel cron (`/cron/run-jobs`) stays as a safety net for anything left over. Both endpoints need `Authorization: Bearer $CRON_SECRET` and answer 401 without it.
 
 ### Schedule it
 
@@ -149,6 +149,7 @@ src/
   cron/tick.ts            hourly tick: queues a gmail_sync per active connection and (AUTOBREW_ENABLED) a create_issue per due schedule
   schedule/               brewing schedule: slot maths (schedule.ts), issue picking (pick.ts), create_issue job (createIssue.ts)
   routes/library.ts       /me, /me/address, /me/settings, /me/schedule, /articles (signed-in user)
+  print/issues.ts         GET /me/issues (last 10), POST /me/issues/:id/reprint (failed issue back to queued; 409 if nothing is left)
   brew/                   GET /brew: articles to a PDF magazine
   server.ts               local server (npm run dev)
   inbound/cloudmailin.ts  CloudMailin JSON (Normalized) payload → InboundEmail
