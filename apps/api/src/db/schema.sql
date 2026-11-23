@@ -91,6 +91,25 @@ alter table articles add column if not exists archived_at timestamptz;
 create index if not exists articles_user_archived_idx
   on articles (user_id, archived_at desc) where archived_at is not null;
 
+-- Brewing schedule: when a user's magazine is built automatically. Days are 0 = Sunday ... 6;
+-- brew_hour is a whole hour in the IANA brew_timezone. last_brew_at is the last time an issue was queued.
+alter table users add column if not exists brew_enabled boolean not null default false;
+alter table users add column if not exists brew_days smallint[] not null default '{}';
+alter table users add column if not exists brew_hour smallint not null default 7;
+alter table users drop constraint if exists users_brew_hour_check;
+alter table users add constraint users_brew_hour_check check (brew_hour between 0 and 23);
+alter table users add column if not exists brew_timezone text not null default 'UTC';
+alter table users add column if not exists brew_budget_minutes int not null default 60;
+alter table users drop constraint if exists users_brew_budget_minutes_check;
+alter table users add constraint users_brew_budget_minutes_check check (brew_budget_minutes in (30, 45, 60, 90));
+alter table users add column if not exists last_brew_at timestamptz;
+
+-- How many issues an article has been left out of, and why it was archived.
+alter table articles add column if not exists rollover_count int not null default 0;
+alter table articles add column if not exists archive_reason text;
+alter table articles drop constraint if exists articles_archive_reason_check;
+alter table articles add constraint articles_archive_reason_check check (archive_reason in ('printed', 'skipped'));
+
 create table if not exists jobs (
   id            bigserial primary key,
   type          text not null,
@@ -192,6 +211,22 @@ create table if not exists auth_verifications (
 );
 create index if not exists "auth_verifications_identifier_idx" on auth_verifications ("identifier");
 
+-- One row per brewed magazine. `layout` snapshots users.paper_layout at brew time; a local print
+-- agent claims queued issues (claimed_by/claimed_at) and reports printed or failed.
+create table if not exists issues (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references users(id) on delete cascade,
+  created_at   timestamptz not null default now(),
+  layout       text not null check (layout in ('flat', 'booklet')),
+  article_ids  uuid[] not null,
+  status       text not null default 'queued' check (status in ('queued', 'printing', 'printed', 'failed')),
+  claimed_by   uuid,
+  claimed_at   timestamptz,
+  printed_at   timestamptz,
+  error        text
+);
+create index if not exists issues_user_created_idx on issues (user_id, created_at desc);
+
 -- Supabase exposes the public schema over its REST API with the anon key. RLS with no policies
 -- shuts that off; the backend connects as the table owner, which bypasses RLS.
 alter table users enable row level security;
@@ -207,3 +242,4 @@ alter table auth_verifications enable row level security;
 alter table gmail_connections enable row level security;
 alter table gmail_messages enable row level security;
 alter table gmail_blocked_senders enable row level security;
+alter table issues enable row level security;
