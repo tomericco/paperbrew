@@ -227,6 +227,26 @@ create table if not exists issues (
 );
 create index if not exists issues_user_created_idx on issues (user_id, created_at desc);
 
+-- A Mac paired for printing. The device token is shown once; only its SHA-256 is stored.
+create table if not exists print_devices (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null references users(id) on delete cascade,
+  name          text not null,
+  token_hash    text not null unique,
+  created_at    timestamptz not null default now(),
+  last_seen_at  timestamptz,
+  revoked_at    timestamptz
+);
+create index if not exists print_devices_user_idx on print_devices (user_id);
+
+-- One-time pairing codes (10 minutes, single use). Only the SHA-256 of the code is stored.
+create table if not exists print_pair_codes (
+  code_hash   text primary key,
+  user_id     uuid not null references users(id) on delete cascade,
+  expires_at  timestamptz not null,
+  used_at     timestamptz
+);
+
 -- Supabase exposes the public schema over its REST API with the anon key. RLS with no policies
 -- shuts that off; the backend connects as the table owner, which bypasses RLS.
 alter table users enable row level security;
@@ -243,3 +263,5 @@ alter table gmail_connections enable row level security;
 alter table gmail_messages enable row level security;
 alter table gmail_blocked_senders enable row level security;
 alter table issues enable row level security;
+alter table print_devices enable row level security;
+alter table print_pair_codes enable row level security;

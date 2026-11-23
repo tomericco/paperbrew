@@ -67,6 +67,7 @@ library.get('/me', async (c) => {
     paperLayout: row.paper_layout,
     gmailAvailable: gmailAvailable(process.env),
     scheduleAvailable: config.AUTOBREW_ENABLED,
+    macAppUrl: config.MAC_APP_URL ?? null,
   });
 });
 

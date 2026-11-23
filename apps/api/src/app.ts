@@ -16,6 +16,7 @@ import { enabledProviders } from './auth/providers.js';
 import { library } from './routes/library.js';
 import { brew } from './brew/route.js';
 import { gmail } from './gmail/routes.js';
+import { devices } from './print/devices.js';
 import { MODEL_ID, zeroShot } from './gmail/model.js';
 
 export const app = new Hono();
@@ -42,6 +43,9 @@ app.route('/', brew);
 
 // Gmail newsletters: GET /gmail/connect, GET /gmail/callback, GET and DELETE /me/gmail.
 app.route('/', gmail);
+
+// Print devices: pairing codes and the user's Macs (/me/print-devices), and POST /agent/pair for the Mac app.
+app.route('/', devices);
 
 const webhookAuth = basicAuth({ username: config.INBOUND_WEBHOOK_USER, password: config.INBOUND_WEBHOOK_PASSWORD });
 
