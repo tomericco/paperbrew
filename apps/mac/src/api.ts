@@ -51,6 +51,9 @@ export function createApi(base: string, token: string | null, fetchImpl: typeof 
         headers,
         body,
         signal: AbortSignal.timeout(init.timeoutMs),
+        // The API never redirects; a redirect would carry the bearer token somewhere else. fetch throws, which is
+        // caught below and treated like any other network failure.
+        redirect: 'error',
       });
     } catch {
       throw new OfflineError('network error');

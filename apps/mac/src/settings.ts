@@ -1,12 +1,18 @@
+import type { Layout } from './lp';
+
+/** An issue that was printed but whose success report did not go through yet (survives quit / restart / update). */
+export type Unreported = { id: string; layout: Layout };
+
 export type Settings = {
   api: string | null;
   printer: string | null;
   lastPrintedAt: string | null;
   /** True once the first-run "start at login" default has been applied, so turning it off sticks. */
   loginItemInit: boolean;
+  unreportedPrinted: Unreported | null;
 };
 
-export const DEFAULT_SETTINGS: Settings = { api: null, printer: null, lastPrintedAt: null, loginItemInit: false };
+export const DEFAULT_SETTINGS: Settings = { api: null, printer: null, lastPrintedAt: null, loginItemInit: false, unreportedPrinted: null };
 
 /** An origin we may talk to: https anywhere, or http only on localhost. Returns the bare origin, else null. */
 export function safeApiOrigin(value: unknown): string | null {
@@ -22,6 +28,18 @@ export function safeApiOrigin(value: unknown): string | null {
   return ok ? u.origin : null;
 }
 
+export function normalizeUnreported(raw: unknown): Unreported | null {
+  const r = (raw && typeof raw === 'object' ? raw : null) as Record<string, unknown> | null;
+  if (!r || typeof r.id !== 'string' || r.id === '') return null;
+  if (r.layout !== 'flat' && r.layout !== 'booklet') return null;
+  return { id: r.id, layout: r.layout };
+}
+
+/** What to persist for a held issue: only one that already printed (its report is all that is left). */
+export function unreportedFromPending(p: { id: string; layout: Layout; printed?: true } | null): Unreported | null {
+  return p && p.printed ? { id: p.id, layout: p.layout } : null;
+}
+
 /** Reads settings.json content defensively: anything malformed falls back to the default for that field. */
 export function normalizeSettings(raw: unknown): Settings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
@@ -35,6 +53,7 @@ export function normalizeSettings(raw: unknown): Settings {
     printer: str(r.printer),
     lastPrintedAt: date(r.lastPrintedAt),
     loginItemInit: r.loginItemInit === true,
+    unreportedPrinted: normalizeUnreported(r.unreportedPrinted),
   };
 }
 

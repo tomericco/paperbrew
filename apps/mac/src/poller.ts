@@ -6,6 +6,8 @@ export const MAX_OFFLINE_TICKS = 5;
 export type PollerDeps<C = void> = {
   /** One poll step, given the issue we are holding (if any) and whatever the caller passed to `tick`. */
   run(pending: Pending, ctx: C): Promise<RunResult>;
+  /** Called whenever the held issue changes (not for `restore`), so the caller can persist it. */
+  onPendingChange?(pending: Pending): void;
 };
 
 /**
@@ -26,6 +28,14 @@ export function createPoller<C = void>(deps: PollerDeps<C>) {
   let offlineCount = 0;
   let generation = 0;
 
+  function setPending(next: Pending): void {
+    const same =
+      pending === next ||
+      (pending !== null && next !== null && pending.id === next.id && pending.layout === next.layout && !!pending.printed === !!next.printed);
+    pending = next;
+    if (!same) deps.onPendingChange?.(pending);
+  }
+
   function trackOffline(result: RunResult): void {
     const p = result.pending;
     if (result.outcome !== 'offline' || !p || p.printed) {
@@ -36,7 +46,7 @@ export function createPoller<C = void>(deps: PollerDeps<C>) {
     offlineCount = offlineId === p.id ? offlineCount + 1 : 1;
     offlineId = p.id;
     if (offlineCount >= MAX_OFFLINE_TICKS) {
-      pending = null;
+      setPending(null);
       offlineId = null;
       offlineCount = 0;
     }
@@ -57,7 +67,7 @@ export function createPoller<C = void>(deps: PollerDeps<C>) {
           result = { outcome: 'failed', pending: null, error: err instanceof Error ? err.message : String(err) };
         }
         if (generation !== startedIn) return null;
-        pending = result.pending;
+        setPending(result.pending);
         trackOffline(result);
         return result;
       } finally {
@@ -67,9 +77,13 @@ export function createPoller<C = void>(deps: PollerDeps<C>) {
     /** Forget any held issue and invalidate a tick that is running right now (disconnect, unauthorized, re-pair). */
     reset(): void {
       generation++;
-      pending = null;
+      setPending(null);
       offlineId = null;
       offlineCount = 0;
+    },
+    /** Put back an issue loaded from disk at startup (does not call onPendingChange: it is already persisted). */
+    restore(held: Pending): void {
+      pending = held;
     },
     get pending(): Pending {
       return pending;

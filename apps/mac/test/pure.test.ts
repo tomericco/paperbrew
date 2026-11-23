@@ -119,8 +119,9 @@ describe('parsePairLink hardening', () => {
     expect(parsePairLink('PAPERBREW://PAIR?code=K7P29QXM&api=https%3A%2F%2Fpaperbrew.app')).toBeNull();
     expect(parsePairLink('paperbrew://pair/x?code=K7P29QXM&api=https%3A%2F%2Fpaperbrew.app')).toBeNull();
   });
-  it('rejects codes with two dashes or 9 characters', () => {
-    expect(parsePairLink('paperbrew://pair?code=K7P2-9Q-XM&api=https%3A%2F%2Fpaperbrew.app')).toBeNull();
+  it('accepts any dash placement, rejects 9 characters', () => {
+    // Deliberate: only dashes and spaces are ignored, the 8 real characters still have to be valid.
+    expect(parsePairLink('paperbrew://pair?code=K7P2-9Q-XM&api=https%3A%2F%2Fpaperbrew.app')?.code).toBe('K7P29QXM');
     expect(parsePairLink('paperbrew://pair?code=K7P29QXMK&api=https%3A%2F%2Fpaperbrew.app')).toBeNull();
   });
   it('uses the first api param when duplicated', () => {

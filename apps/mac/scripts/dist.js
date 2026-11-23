@@ -1,6 +1,7 @@
 // `npm run dist`: checks PAPERBREW_API_URL, builds, then packages the universal .dmg with electron-builder.
 // Written in Node (not shell) so the env handling works in any shell.
 const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.join(__dirname, '..');
@@ -20,5 +21,7 @@ function run(cmd, args) {
 }
 
 run(process.execPath, [path.join(__dirname, 'require-api-url.js')]);
+// Start from an empty dist/ so a module deleted from src/ can never ship from a stale build (build recreates it).
+fs.rmSync(path.join(root, 'dist'), { recursive: true, force: true });
 run('npm', ['run', 'build']);
 run('npx', args);

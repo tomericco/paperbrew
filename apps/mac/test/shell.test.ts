@@ -14,6 +14,8 @@ import {
   failureKey,
   needsPairConfirmation,
   normalizeSettings,
+  normalizeUnreported,
+  unreportedFromPending,
   parseDefaults,
   safeApiOrigin,
   settingsUrl,
@@ -31,6 +33,17 @@ describe('normalizeCode', () => {
     expect(normalizeCode('ABCD23456')).toBeNull();
     expect(normalizeCode('ABCD234O')).toBeNull(); // O is not in the alphabet
     expect(normalizeCode('')).toBeNull();
+  });
+  it('ignores every dash and whitespace character, nothing else', () => {
+    expect(normalizeCode('K7P2 9QXM')).toBe('K7P29QXM');
+    expect(normalizeCode('K7P2-9QXM')).toBe('K7P29QXM');
+    expect(normalizeCode('K7-P29-QXM')).toBe('K7P29QXM');
+    expect(normalizeCode(' k7p2 - 9qxm\n')).toBe('K7P29QXM');
+    expect(normalizeCode('K7P2+9QXM')).toBeNull();
+    expect(normalizeCode('K7P2/9QXM')).toBeNull();
+    expect(normalizeCode('K7P2_9QXM')).toBeNull();
+    expect(normalizeCode('K7P2-9QXMA')).toBeNull(); // 9 characters
+    expect(normalizeCode('K7P2-9QX')).toBeNull(); // 7 characters
   });
 });
 
@@ -56,14 +69,14 @@ describe('defaults, failure key, confirm detail', () => {
 
 describe('settings', () => {
   it('defaults and drops malformed fields', () => {
-    expect(normalizeSettings(null)).toEqual({ api: null, printer: null, lastPrintedAt: null, loginItemInit: false });
+    expect(normalizeSettings(null)).toEqual({ api: null, printer: null, lastPrintedAt: null, loginItemInit: false, unreportedPrinted: null });
     expect(normalizeSettings({ api: 'http://evil.example', printer: 5, lastPrintedAt: 'nope', loginItemInit: 'yes' })).toEqual({
-      api: null, printer: null, lastPrintedAt: null, loginItemInit: false,
+      api: null, printer: null, lastPrintedAt: null, loginItemInit: false, unreportedPrinted: null,
     });
   });
   it('keeps valid fields and reduces api to its origin', () => {
-    const s = normalizeSettings({ api: 'https://paperbrew.example/app?x=1', printer: 'HP', lastPrintedAt: '2026-11-22T10:00:00Z', loginItemInit: true });
-    expect(s).toEqual({ api: 'https://paperbrew.example', printer: 'HP', lastPrintedAt: '2026-11-22T10:00:00Z', loginItemInit: true });
+    const s = normalizeSettings({ api: 'https://paperbrew.example/app?x=1', printer: 'HP', lastPrintedAt: '2026-11-22T10:00:00Z', loginItemInit: true, unreportedPrinted: null });
+    expect(s).toEqual({ api: 'https://paperbrew.example', printer: 'HP', lastPrintedAt: '2026-11-22T10:00:00Z', loginItemInit: true, unreportedPrinted: null });
   });
   it('merge applies a patch and null resets a field', () => {
     const base = normalizeSettings({ api: 'http://localhost:5173', printer: 'HP' });
@@ -180,6 +193,66 @@ describe('createPoller', () => {
     const p = createPoller({ run: async () => { throw new Error('boom'); } });
     expect(await p.tick()).toEqual({ outcome: 'failed', pending: null, error: 'boom' });
     expect(p.busy).toBe(false);
+  });
+});
+
+describe('persisting a printed-but-unreported issue', () => {
+  it('only a printed pending is persisted', () => {
+    expect(unreportedFromPending({ id: 'a', layout: 'booklet', printed: true })).toEqual({ id: 'a', layout: 'booklet' });
+    expect(unreportedFromPending({ id: 'a', layout: 'booklet' })).toBeNull();
+    expect(unreportedFromPending(null)).toBeNull();
+  });
+  it('normalizeUnreported validates what comes back from disk', () => {
+    expect(normalizeUnreported({ id: 'a', layout: 'flat' })).toEqual({ id: 'a', layout: 'flat' });
+    expect(normalizeUnreported({ id: '', layout: 'flat' })).toBeNull();
+    expect(normalizeUnreported({ id: 'a', layout: 'poster' })).toBeNull();
+    expect(normalizeUnreported({ id: 5, layout: 'flat' })).toBeNull();
+    expect(normalizeUnreported('x')).toBeNull();
+    expect(normalizeUnreported(null)).toBeNull();
+  });
+  it('round-trips through settings normalize/merge', () => {
+    const s = mergeSettings(normalizeSettings({}), { unreportedPrinted: { id: 'a', layout: 'booklet' } });
+    expect(normalizeSettings(JSON.parse(JSON.stringify(s))).unreportedPrinted).toEqual({ id: 'a', layout: 'booklet' });
+    expect(mergeSettings(s, { unreportedPrinted: null }).unreportedPrinted).toBeNull();
+  });
+
+  const printed: Pending = { id: 'a', layout: 'booklet', printed: true };
+  it('onPendingChange fires only on real changes and on reset, not on restore', async () => {
+    const seen: Pending[] = [];
+    const results: RunResult[] = [
+      { outcome: 'offline', pending: printed },
+      { outcome: 'offline', pending: { ...printed } }, // same issue again: no change
+      { outcome: 'printed', pending: null },
+    ];
+    const p = createPoller({ run: async () => results.shift()!, onPendingChange: (x) => seen.push(x) });
+    p.restore(printed);
+    expect(seen).toEqual([]);
+    expect(p.pending).toEqual(printed);
+    await p.tick();
+    expect(seen).toEqual([]); // still the same printed issue
+    await p.tick();
+    await p.tick();
+    expect(seen).toEqual([null]); // reported: cleared
+  });
+  it('a restored printed pending is handed to run, and reset clears it', async () => {
+    const seen: Pending[] = [];
+    const run = vi.fn(async (_p: Pending, _c: void): Promise<RunResult> => ({ outcome: 'offline', pending: printed }));
+    const p = createPoller({ run, onPendingChange: (x) => seen.push(x) });
+    p.restore(printed);
+    await p.tick();
+    expect(run).toHaveBeenCalledWith(printed, undefined);
+    p.reset();
+    expect(p.pending).toBeNull();
+    expect(seen).toEqual([null]);
+  });
+  it('reports a new printed pending as it appears', async () => {
+    const seen: Pending[] = [];
+    const p = createPoller({
+      run: async () => ({ outcome: 'offline', pending: printed }) as RunResult,
+      onPendingChange: (x) => seen.push(x),
+    });
+    await p.tick();
+    expect(seen).toEqual([printed]);
   });
 });
 

@@ -1,9 +1,12 @@
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const CODE_RE = new RegExp(`^[${CODE_ALPHABET}]{8}$`);
 
-/** Normalizes a pairing code typed or pasted by a person: uppercase, one dash removed. Null if it is not a valid code. */
+/**
+ * Normalizes a pairing code typed or pasted by a person: uppercase, with every dash and whitespace removed (so
+ * "K7P2-9QXM" and "K7P2 9QXM" both work). Null if the rest is not 8 characters from the code alphabet.
+ */
 export function normalizeCode(raw: string): string | null {
-  const code = raw.trim().toUpperCase().replace('-', '');
+  const code = raw.toUpperCase().replace(/[\s-]/g, '');
   return CODE_RE.test(code) ? code : null;
 }
 

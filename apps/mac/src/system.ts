@@ -5,12 +5,15 @@ import path from 'node:path';
 import { lpArgs, type Layout } from './lp';
 
 const TEMP_PREFIX = 'paperbrew-';
+// Absolute paths: never look the binaries up on PATH.
+const LP = '/usr/bin/lp';
+const LPSTAT = '/usr/bin/lpstat';
 
 /** `lp`, never through a shell. Rejects with lp's stderr so the failure shows up in Paperbrew settings. */
 export function print(file: string, layout: Layout, printer: string | null): Promise<void> {
   const args = lpArgs(file, layout, printer);
   return new Promise((resolve, reject) => {
-    execFile('lp', args, { timeout: 60_000 }, (err, _stdout, stderr) => {
+    execFile(LP, args, { timeout: 60_000 }, (err, _stdout, stderr) => {
       if (!err) return resolve();
       const text = String(stderr ?? '').trim();
       reject(new Error(text || err.message));
@@ -21,7 +24,7 @@ export function print(file: string, layout: Layout, printer: string | null): Pro
 /** Output of `lpstat -p -d`, or '' when CUPS has no printers or lpstat fails. */
 export function lpstat(): Promise<string> {
   return new Promise((resolve) => {
-    execFile('lpstat', ['-p', '-d'], { timeout: 5_000 }, (err, stdout) => {
+    execFile(LPSTAT, ['-p', '-d'], { timeout: 5_000 }, (err, stdout) => {
       resolve(err ? '' : String(stdout));
     });
   });

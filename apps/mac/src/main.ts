@@ -19,6 +19,7 @@ import {
   parseDefaults,
   settingsUrl,
   truncateError,
+  unreportedFromPending,
 } from './settings';
 import { statusText, type AppState } from './status';
 import { clearToken, loadSettings, loadToken, saveSettings, saveToken } from './store';
@@ -55,7 +56,22 @@ const defaults = (() => {
 // Everything a tick needs, captured just before it starts.
 type TickCtx = { base: string; token: string; printer: string | null };
 
+// Remembers which printed-but-unreported issue is on disk, so settings.json is only written when it changes.
+let persistedUnreported: string | null = null;
+function persistPending(pending: Parameters<typeof unreportedFromPending>[0]): void {
+  const u = unreportedFromPending(pending);
+  const key = u ? `${u.id}:${u.layout}` : null;
+  if (key === persistedUnreported) return;
+  persistedUnreported = key;
+  try {
+    saveSettings({ unreportedPrinted: u });
+  } catch {
+    // Best effort: a disk error must not stop printing.
+  }
+}
+
 const poller = createPoller<TickCtx>({
+  onPendingChange: persistPending,
   run: (pending, ctx) => {
     return runOnce(
       { api: createApi(ctx.base, ctx.token), print, writeTemp, removeTemp, printer: ctx.printer },
@@ -180,6 +196,8 @@ function handleResult(r: RunResult): void {
   if (r.outcome !== 'failed') lastErrorNotified = null;
   switch (r.outcome) {
     case 'unauthorized':
+      // Happens once per transition: the token is cleared right here, so later ticks do nothing.
+      notify('Paperbrew removed this Mac. Click Connect this Mac in Settings to set it up again.');
       stopPolling();
       clearToken();
       poller.reset();
@@ -340,6 +358,21 @@ function registerProtocol(): void {
   }
 }
 
+/**
+ * A printed issue whose report never went through (we quit or updated while offline) is picked up again, so the
+ * next tick only retries the report and never prints twice. It belongs to the paired device: with no token it is stale.
+ */
+function restoreUnreported(): void {
+  const u = loadSettings().unreportedPrinted;
+  if (!u) return;
+  if (loadToken() === null) {
+    saveSettings({ unreportedPrinted: null });
+    return;
+  }
+  persistedUnreported = `${u.id}:${u.layout}`;
+  poller.restore({ id: u.id, layout: u.layout, printed: true });
+}
+
 function applyFirstRunLoginItem(): void {
   if (!app.isPackaged) return;
   if (loadSettings().loginItemInit) return;
@@ -381,6 +414,7 @@ if (!app.requestSingleInstanceLock()) {
 
     for (const url of queuedUrls.splice(0)) void handlePairLink(url);
 
+    restoreUnreported();
     startPolling();
     powerMonitor.on('resume', () => void tick());
     void tick();

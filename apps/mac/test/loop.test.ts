@@ -207,6 +207,18 @@ describe('createApi', () => {
   it('claim: 401 -> UnauthorizedError', async () => {
     await expect(api(async () => res(401)).claim()).rejects.toBeInstanceOf(UnauthorizedError);
   });
+  it('never follows redirects; a redirect failure is an OfflineError', async () => {
+    const f = vi.fn(async (_u: string, _i?: RequestInit) => { throw new TypeError('redirect mode is set to error'); });
+    await expect(api(f).claim()).rejects.toBeInstanceOf(OfflineError);
+    const g = vi.fn(async (_u: string, _i?: RequestInit) => res(204));
+    const a = api(g);
+    await a.claim();
+    await a.downloadPdf('x');
+    await a.report('x', { ok: true }).catch(() => {});
+    await api(g, null).pair('ABCD1234', 'Mac').catch(() => {});
+    expect(g.mock.calls.length).toBe(4);
+    for (const [, init] of g.mock.calls) expect(init?.redirect).toBe('error');
+  });
   it('claim: fetch throws -> OfflineError', async () => {
     await expect(api(async () => { throw new TypeError('fetch failed'); }).claim()).rejects.toBeInstanceOf(OfflineError);
   });
