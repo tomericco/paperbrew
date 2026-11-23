@@ -56,6 +56,12 @@ All from the repo root:
 - `GET /brew` returns the signed-in user's saved articles as a PDF magazine (can take 5 to 30 s). The web app's Library page downloads it with the Brew button.
 - Brew has two layouts, stored per user as `paper_layout`: `flat` (default, A4 pages) and `booklet` (A5 pages imposed two-up on A4 landscape sheets, printed two-sided and folded; it binds right when every article is Hebrew or Arabic, otherwise left). `PUT /me/settings` with `{ "paperLayout": "flat" | "booklet" }` sets the layout and `GET /brew` uses it.
 
+### Printing (agent API)
+- Pairing: Settings calls `POST /me/print-devices/pair-code` (one-time, 10 minutes) and opens `paperbrew://pair?code=…&api=<BETTER_AUTH_URL>`; the Mac exchanges the code at `POST /agent/pair` for a bearer token. One Mac per user (pairing revokes the others). `api` is the web origin, so the agent calls `<api>/api/agent/...`.
+- `/agent/*` routes use `Authorization: Bearer <token>` (401 = revoked): `POST /agent/jobs/claim`, `GET /agent/issues/:id/pdf`, `POST /agent/issues/:id/result`. Contract in `apps/api/README.md`.
+- Issue states: `queued` → `printing` → `printed` | `failed`. The stale sweep in `/cron/tick` fails an issue stuck `printing` for 30 minutes (`timed out`); a late success report still counts.
+- `MAC_APP_URL` is the Mac app download link; Settings shows the Printer section only when it is set.
+
 ## Open decisions
 - Inbound provider: CloudMailin (decided 2026-11-01: free, no domain needed; addresses are `<id>+{token}@cloudmailin.net`). Adapter in `src/inbound/cloudmailin.ts`; the Postmark adapter (`src/inbound/postmark.ts`) is kept as the alternative. Both feed one shared handler in `src/app.ts`.
 - `REQUIRE_KNOWN_SENDER` default: currently false, so the random address token is the secret.
@@ -69,4 +75,4 @@ All from the repo root:
 5. Magazine model plus print/PDF rendering. `GET /brew` already renders all saved articles to a PDF, flat or as an imposed A4 booklet (done); the magazine model (reorder, rename, looks, optional pages) is still to do.
 6. ~~Gmail newsletters~~ done: opt-in sync into the library (hourly tick queues `gmail_sync`).
 7. ~~Brewing schedule (PR 2)~~ done: per-user days, hour, time zone and reading-time budget; the hourly tick queues `create_issue`, which stores a queued `issues` row. It is gated by `AUTOBREW_ENABLED` (default off, which also hides the Schedule settings) until printing exists.
-8. Next: print API and pairing, then the Mac app (local agent over IPP) that prints queued issues.
+8. ~~Print API and pairing~~ done (PR 3). Next: the Mac app (local agent) that claims queued issues and prints them.
