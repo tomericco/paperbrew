@@ -13,6 +13,7 @@ const cfg = vi.hoisted(() => ({
   FETCH_MAX_BYTES: 1000,
   PORT: 8787,
   CRON_SECRET: 'cron-secret-cron-secret' as string | undefined,
+  AUTOBREW_ENABLED: true,
 }));
 vi.mock('../src/config.js', () => ({ config: cfg }));
 // No job may actually run.
@@ -27,6 +28,7 @@ const BEARER = { authorization: 'Bearer cron-secret-cron-secret' };
 
 beforeEach(() => {
   cfg.CRON_SECRET = 'cron-secret-cron-secret';
+  cfg.AUTOBREW_ENABLED = true;
   vi.mocked(drain).mockReset();
 });
 afterEach(() => vi.restoreAllMocks());
@@ -57,7 +59,7 @@ describe('GET /cron/tick', () => {
     expect(drain).not.toHaveBeenCalled();
   });
 
-  it('queues gmail_sync jobs in one statement, then drains, and reports both counts', async () => {
+  it('queues gmail_sync and create_issue jobs, then drains, and reports the counts', async () => {
     const order: string[] = [];
     const query = vi.spyOn(pool, 'query').mockImplementation((async () => {
       order.push('enqueue');
@@ -71,27 +73,73 @@ describe('GET /cron/tick', () => {
     const res = await app.request('/cron/tick', { headers: BEARER });
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, gmail: 3, ran: 5 });
-    expect(query).toHaveBeenCalledTimes(1);
+    expect(await res.json()).toEqual({ ok: true, gmail: 3, brews: 0, ran: 5 });
+    expect(query).toHaveBeenCalledTimes(2);
     const sql = String(query.mock.calls[0][0]);
     expect(sql).toMatch(/insert into jobs/);
     expect(sql).toContain('gmail_connections');
     expect(sql).toContain("status = 'active'");
     expect(sql).toContain('not exists');
     expect(drain).toHaveBeenCalledTimes(1);
-    expect(order).toEqual(['enqueue', 'drain']);
+    expect(order).toEqual(['enqueue', 'enqueue', 'drain']);
+  });
+});
+
+describe('tick() with AUTOBREW_ENABLED off', () => {
+  it('skips the brew step: no users query, brews 0, gmail still queued', async () => {
+    cfg.AUTOBREW_ENABLED = false;
+    const query = vi.fn(async () => ({ rowCount: 2, rows: [] }));
+    expect(await tick({ query } as never, new Date('2026-11-23T08:30:00Z'))).toEqual({ gmail: 2, brews: 0 });
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(String(query.mock.calls[0][0])).toContain('gmail_sync');
+    expect(query.mock.calls.some((c) => /from users/.test(String(c[0])))).toBe(false);
   });
 });
 
 describe('tick()', () => {
-  it('returns the number of rows the enqueue statement inserted', async () => {
-    const db = { query: vi.fn().mockResolvedValue({ rowCount: 2, rows: [] }) };
-    expect(await tick(db as never)).toEqual({ gmail: 2 });
-    expect(db.query).toHaveBeenCalledTimes(1);
+  // Monday 2026-11-23 08:30 UTC; the 07:00 UTC Monday slot is open.
+  const NOW = new Date('2026-11-23T08:30:00Z');
+  const due = (id: string, over: Record<string, unknown> = {}) => ({
+    id, brew_days: [1], brew_hour: 7, brew_timezone: 'UTC', last_brew_at: null, ...over,
   });
 
-  it('reports 0 when the driver gives no rowCount', async () => {
-    const db = { query: vi.fn().mockResolvedValue({ rowCount: null, rows: [] }) };
-    expect(await tick(db as never)).toEqual({ gmail: 0 });
+  function fakeDb(users: Record<string, unknown>[] = [], gmailCount: number | null = 2) {
+    const query = vi.fn(async (sql: string) => {
+      if (/from users/.test(sql)) return { rows: users, rowCount: users.length };
+      if (/insert into jobs/.test(sql) && sql.includes('gmail_sync')) return { rowCount: gmailCount, rows: [] };
+      return { rowCount: 1, rows: [] };
+    });
+    return { query };
+  }
+  const brewInserts = (db: { query: ReturnType<typeof vi.fn> }) =>
+    db.query.mock.calls.filter((c) => /insert into jobs/.test(String(c[0])) && (c[1] as unknown[] | undefined)?.[0] === 'create_issue');
+
+  it('returns the number of gmail rows inserted and the brews queued', async () => {
+    const db = fakeDb([due('u1'), due('u2')]);
+    expect(await tick(db as never, NOW)).toEqual({ gmail: 2, brews: 2 });
+  });
+
+  it('reports 0 gmail when the driver gives no rowCount', async () => {
+    const db = fakeDb([], null);
+    expect(await tick(db as never, NOW)).toEqual({ gmail: 0, brews: 0 });
+  });
+
+  it('loads enabled users without an undone create_issue job and queues only the due ones', async () => {
+    const db = fakeDb([
+      due('u-due'),
+      due('u-wrong-day', { brew_days: [2] }),
+      due('u-done', { last_brew_at: new Date('2026-11-23T07:10:00Z') }),
+      due('u-stale', { brew_days: [1], brew_hour: 1 }),
+    ]);
+    expect(await tick(db as never, NOW)).toEqual({ gmail: 2, brews: 1 });
+
+    const select = db.query.mock.calls.map((c) => String(c[0])).find((s) => /from users/.test(s))!;
+    expect(select).toContain('brew_enabled');
+    expect(select).toContain('create_issue');
+    expect(select).toContain('done_at is null');
+    expect(select).toContain('not exists');
+    const ins = brewInserts(db);
+    expect(ins).toHaveLength(1);
+    expect(ins[0][1]).toEqual(['create_issue', { id: 'u-due' }]);
   });
 });

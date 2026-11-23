@@ -14,10 +14,12 @@ vi.mock('../src/config.js', () => ({
     FETCH_TIMEOUT_MS: 1000,
     FETCH_MAX_BYTES: 1000,
     PORT: 8787,
+    AUTOBREW_ENABLED: false,
   },
 }));
 
 const { app } = await import('../src/app.js');
+const { config } = await import('../src/config.js');
 const { auth } = await import('../src/auth/auth.js');
 const { pool } = await import('../src/db/client.js');
 const { gmailAvailable } = await import('../src/gmail/available.js');
@@ -80,6 +82,23 @@ describe('requireUser', () => {
 describe('paper layout setting', () => {
   afterEach(() => vi.restoreAllMocks());
 
+  const SAVED = {
+    paper_layout: 'booklet',
+    brew_enabled: false,
+    brew_days: [],
+    brew_hour: 7,
+    brew_timezone: 'UTC',
+    brew_budget_minutes: 60,
+  };
+  const SAVED_JSON = {
+    paperLayout: 'booklet',
+    brewEnabled: false,
+    brewDays: [],
+    brewHour: 7,
+    brewTimezone: 'UTC',
+    brewBudgetMinutes: 60,
+  };
+
   const signedIn = () => {
     vi.spyOn(auth.api, 'getSession').mockResolvedValue({
       user: { id: 'auth-1', email: 'a@example.com' },
@@ -90,6 +109,7 @@ describe('paper layout setting', () => {
       if (/from users u join inbound_addresses/.test(sql)) {
         return { rows: [{ token: 'amber-otter', email: 'a@example.com', paper_layout: 'booklet' }] };
       }
+      if (/^\s*update users set/.test(sql)) return { rows: [SAVED], rowCount: 1 };
       return { rows: [] };
     }) as never);
   };
@@ -126,22 +146,197 @@ describe('paper layout setting', () => {
     }
   });
 
+  it('GET /me returns scheduleAvailable from AUTOBREW_ENABLED', async () => {
+    signedIn();
+    const off = await app.request('/me', { headers: { cookie: 'better-auth.session_token=x' } });
+    expect((await off.json()).scheduleAvailable).toBe(false);
+
+    (config as { AUTOBREW_ENABLED: boolean }).AUTOBREW_ENABLED = true;
+    try {
+      const on = await app.request('/me', { headers: { cookie: 'better-auth.session_token=x' } });
+      expect((await on.json()).scheduleAvailable).toBe(true);
+    } finally {
+      (config as { AUTOBREW_ENABLED: boolean }).AUTOBREW_ENABLED = false;
+    }
+  });
+
   it('PUT /me/settings saves the layout', async () => {
     const query = signedIn();
     const res = await put({ paperLayout: 'booklet' });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ paperLayout: 'booklet' });
-    const updates = query.mock.calls.filter(([sql]) => /update users set paper_layout = \$1 where id = \$2/.test(String(sql)));
+    expect(await res.json()).toEqual(SAVED_JSON);
+    const updates = query.mock.calls.filter(([sql]) => /update users set paper_layout = \$1 where id = \$2 returning/.test(String(sql)));
     expect(updates).toHaveLength(1);
     expect(updates[0]![1]).toEqual(['booklet', 'user-1']);
   });
 
-  it.each([{}, { paperLayout: 'a5' }, null])('PUT /me/settings rejects %j', async (body) => {
+  it('PUT /me/settings updates only the given columns, with parameters', async () => {
+    const query = signedIn();
+    const res = await put({
+      brewEnabled: true,
+      brewDays: [5, 1, 3],
+      brewHour: 18,
+      brewTimezone: 'Asia/Jerusalem',
+      brewBudgetMinutes: 45,
+    });
+    expect(res.status).toBe(200);
+    const [update] = query.mock.calls.filter(([sql]) => /^\s*update users set/.test(String(sql)));
+    const sql = String(update![0]);
+    expect(sql).toContain('brew_enabled = $1');
+    expect(sql).toContain('brew_days = $2');
+    expect(sql).toContain('brew_hour = $3');
+    expect(sql).toContain('brew_timezone = $4');
+    expect(sql).toContain('brew_budget_minutes = $5');
+    expect(sql).toContain('where id = $6');
+    expect(sql).not.toContain('paper_layout =');
+    expect(sql).not.toContain('Jerusalem');
+    expect(update![1]).toEqual([true, [1, 3, 5], 18, 'Asia/Jerusalem', 45, 'user-1']);
+  });
+
+  it('PUT /me/settings with a single schedule key sets just that column', async () => {
+    const query = signedIn();
+    expect((await put({ brewHour: 0 })).status).toBe(200);
+    const [update] = query.mock.calls.filter(([sql]) => /^\s*update users set/.test(String(sql)));
+    expect(String(update![0])).toMatch(/set brew_hour = \$1 where id = \$2/);
+    expect(update![1]).toEqual([0, 'user-1']);
+  });
+
+  it.each([
+    {},
+    null,
+    { foo: 1 },
+    { paperLayout: 'a5' },
+    { brewTimezone: 'Mars/Base' },
+    { brewTimezone: '' },
+    { brewBudgetMinutes: 50 },
+    { brewHour: 24 },
+    { brewHour: -1 },
+    { brewHour: 7.5 },
+    { brewDays: [7] },
+    { brewDays: [1, 1] },
+    { brewDays: [1.5] },
+    { brewDays: [0, 1, 2, 3, 4, 5, 6, 0] },
+    { brewEnabled: 'yes' },
+  ])('PUT /me/settings rejects %j', async (body) => {
     const query = signedIn();
     const res = await put(body);
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: 'paperLayout must be flat or booklet' });
+    expect(await res.json()).toEqual({ error: expect.any(String) });
     expect(query.mock.calls.filter(([sql]) => /update users/.test(String(sql)))).toHaveLength(0);
+  });
+
+  it('PUT /me/settings accepts an empty day list', async () => {
+    const query = signedIn();
+    expect((await put({ brewDays: [] })).status).toBe(200);
+    const [update] = query.mock.calls.filter(([sql]) => /^\s*update users set/.test(String(sql)));
+    expect(update![1]).toEqual([[], 'user-1']);
+  });
+});
+
+describe('GET /me/schedule', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const cookie = { cookie: 'better-auth.session_token=x' };
+  const row = (over: Record<string, unknown> = {}) => ({
+    brew_enabled: true,
+    brew_days: [0],
+    brew_hour: 7,
+    brew_timezone: 'UTC',
+    brew_budget_minutes: 90,
+    ...over,
+  });
+
+  const signedIn = (userRow: unknown) => {
+    vi.spyOn(auth.api, 'getSession').mockResolvedValue({
+      user: { id: 'auth-1', email: 'a@example.com' },
+      session: {},
+    } as never);
+    return vi.spyOn(pool, 'query').mockImplementation((async (sql: string) => {
+      if (/from users where auth_user_id/.test(sql)) return { rows: [{ id: 'user-1' }] };
+      if (/brew_enabled/.test(sql)) return { rows: [userRow] };
+      return { rows: [] };
+    }) as never);
+  };
+
+  it('returns the schedule with nextBrewAt as an ISO string', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-23T12:00:00Z')); // a Monday
+    const query = signedIn(row());
+    const res = await app.request('/me/schedule', { headers: cookie });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      enabled: true,
+      days: [0],
+      hour: 7,
+      timezone: 'UTC',
+      budgetMinutes: 90,
+      nextBrewAt: '2026-11-29T07:00:00.000Z',
+      brewDue: false,
+    });
+    const select = query.mock.calls.find(([sql]) => /brew_enabled/.test(String(sql)))!;
+    expect(select[1]).toEqual(['user-1']);
+  });
+
+  it('nextBrewAt is null when disabled', async () => {
+    signedIn(row({ brew_enabled: false }));
+    const body = await (await app.request('/me/schedule', { headers: cookie })).json();
+    expect(body.enabled).toBe(false);
+    expect(body.nextBrewAt).toBeNull();
+  });
+
+  describe('brewDue', () => {
+    // Monday 2026-11-23 08:30 UTC; the Monday 07:00 UTC slot is open.
+    const monday = row({ brew_days: [1], last_brew_at: null });
+
+    it('is true when the slot is open and not yet brewed, while nextBrewAt stays next week', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-23T08:30:00Z'));
+      signedIn(monday);
+      const body = await (await app.request('/me/schedule', { headers: cookie })).json();
+      expect(body.brewDue).toBe(true);
+      expect(body.nextBrewAt).toBe('2026-11-30T07:00:00.000Z');
+    });
+
+    it('is false once this slot was brewed', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-23T08:30:00Z'));
+      signedIn({ ...monday, last_brew_at: new Date('2026-11-23T07:10:00Z') });
+      const body = await (await app.request('/me/schedule', { headers: cookie })).json();
+      expect(body.brewDue).toBe(false);
+    });
+
+    it('is false when the slot is older than the window', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-23T14:00:00Z'));
+      signedIn(monday);
+      const body = await (await app.request('/me/schedule', { headers: cookie })).json();
+      expect(body.brewDue).toBe(false);
+    });
+
+    it('is false when the schedule is disabled', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-23T08:30:00Z'));
+      signedIn({ ...monday, brew_enabled: false });
+      const body = await (await app.request('/me/schedule', { headers: cookie })).json();
+      expect(body.brewDue).toBe(false);
+      expect(body.nextBrewAt).toBeNull();
+    });
+
+    it('selects last_brew_at', async () => {
+      const query = signedIn(monday);
+      await app.request('/me/schedule', { headers: cookie });
+      const select = query.mock.calls.find(([sql]) => /brew_enabled/.test(String(sql)))!;
+      expect(String(select[0])).toContain('last_brew_at');
+    });
+  });
+
+  it('nextBrewAt is null when no days are chosen', async () => {
+    signedIn(row({ brew_days: [] }));
+    const body = await (await app.request('/me/schedule', { headers: cookie })).json();
+    expect(body.nextBrewAt).toBeNull();
   });
 });
 
@@ -185,7 +380,8 @@ describe('archiving articles', () => {
   it('GET /articles?archived=1 lists archived with archivedAt', async () => {
     const archivedAt = new Date('2026-11-20T10:00:00.000Z');
     const query = signedIn([
-      { id: A, title: 'T', site_name: 's', source_url: 'https://x.test', status: 'ready', word_count: 10, created_at: new Date('2026-11-01T00:00:00Z'), archived_at: archivedAt },
+      { id: A, title: 'T', site_name: 's', source_url: 'https://x.test', status: 'ready', word_count: 10, created_at: new Date('2026-11-01T00:00:00Z'), archived_at: archivedAt, archive_reason: 'skipped' },
+      { id: B, title: 'U', site_name: 's', source_url: 'https://y.test', status: 'ready', word_count: 10, created_at: new Date('2026-11-01T00:00:00Z'), archived_at: archivedAt },
     ]);
     const res = await app.request('/articles?archived=1', { headers: cookie });
     expect(res.status).toBe(200);
@@ -197,6 +393,9 @@ describe('archiving articles', () => {
     const { articles } = await res.json();
     expect(articles[0].archivedAt).toBe('2026-11-20T10:00:00.000Z');
     expect(articles[0].id).toBe(A);
+    expect(sql).toContain('archive_reason');
+    expect(articles[0].archiveReason).toBe('skipped');
+    expect(articles[1].archiveReason).toBeNull();
   });
 
   it('archives only own, unarchived rows', async () => {
@@ -239,6 +438,7 @@ describe('archiving articles', () => {
     const update = articleSql(query)[0]!;
     expect(String(update[0])).toContain('archived_at = null');
     expect(String(update[0])).toContain('archived_at is not null');
+    expect(String(update[0]).replace(/\s+/g, ' ')).toContain('rollover_count = 0, archive_reason = null');
     expect(update[1]).toEqual([A, 'user-1']);
   });
 

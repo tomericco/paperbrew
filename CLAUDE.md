@@ -67,3 +67,6 @@ All from the repo root:
 3. ~~Articles API~~ done: list, remove, and address change. Rename is still to do.
 4. Confirmation reply email ("Saved 2 articles"), and a reply on failure.
 5. Magazine model plus print/PDF rendering. `GET /brew` already renders all saved articles to a PDF, flat or as an imposed A4 booklet (done); the magazine model (reorder, rename, looks, optional pages) is still to do.
+6. ~~Gmail newsletters~~ done: opt-in sync into the library (hourly tick queues `gmail_sync`).
+7. ~~Brewing schedule (PR 2)~~ done: per-user days, hour, time zone and reading-time budget; the hourly tick queues `create_issue`, which stores a queued `issues` row. It is gated by `AUTOBREW_ENABLED` (default off, which also hides the Schedule settings) until printing exists.
+8. Next: print API and pairing, then the Mac app (local agent over IPP) that prints queued issues.
