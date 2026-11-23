@@ -5,11 +5,11 @@ import { config } from '../config.js';
 import { isUniqueViolation, pool } from '../db/client.js';
 import { requireUser, type UserEnv } from '../routes/library.js';
 import { formatPairCode, newDeviceToken, newPairCode, normalizePairCode, sha256 } from './secrets.js';
+import { UUID_RE } from '../uuid.js';
 
 /** Hono env for routes behind `requireDevice`: the paired Mac and the user it prints for. */
 export type DeviceEnv = { Variables: { deviceId: string; userId: string } };
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CODE_RE = /^[A-Z0-9]{8}$/;
 const NAME_MAX = 80;
 

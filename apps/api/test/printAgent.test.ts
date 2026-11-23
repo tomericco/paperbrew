@@ -139,7 +139,7 @@ describe('POST /agent/issues/:id/result', () => {
     expect(all[0]).toBe('begin');
     expect(all.at(-1)).toBe('commit');
     const issue = clientQuery.mock.calls.find(([s]) => stateSql.test(String(s)))!;
-    expect(String(issue[0])).toMatch(/set status = 'printed', printed_at = now\(\)/);
+    expect(String(issue[0])).toMatch(/set status = 'printed', printed_at = now\(\), error = null/);
     expect(String(issue[0])).toMatch(/status = 'printing'/);
     expect(String(issue[0])).toMatch(/claimed_by = \$2/);
     expect(String(issue[0])).toMatch(/user_id = \$3/);
@@ -152,6 +152,66 @@ describe('POST /agent/issues/:id/result', () => {
     expect(archive[1]).toEqual([['a1', 'a2'], 'user-9']);
     expect(all.findIndex((s) => stateSql.test(s))).toBeLessThan(all.findIndex((s) => archiveSql.test(s)));
     expect(release).toHaveBeenCalledWith();
+  });
+
+  it('ok also accepts an issue the stale sweep failed as \'timed out\' (late report): same conditional update, same archive', async () => {
+    withIssue(true);
+
+    const res = await post(`/agent/issues/${ISSUE_ID}/result`, { ok: true });
+
+    expect(res.status).toBe(204);
+    const issue = clientQuery.mock.calls.find(([s]) => stateSql.test(String(s)))!;
+    const s = String(issue[0]).replace(/\s+/g, ' ');
+    expect(s).toMatch(/where id = \$1 and claimed_by = \$2 and user_id = \$3 and \(status = 'printing' or \(status = 'failed' and error = 'timed out'\)\)/);
+    expect(s).toMatch(/error = null/);
+    expect(issue[1]).toEqual([ISSUE_ID, DEVICE_ID, 'user-9']);
+    const archive = clientQuery.mock.calls.find(([s2]) => archiveSql.test(String(s2)))!;
+    expect(String(archive[0])).toMatch(/archive_reason = 'printed', rollover_count = 0/);
+    expect(String(archive[0])).toMatch(/archived_at is null/);
+    expect(archive[1]).toEqual([['a1', 'a2'], 'user-9']);
+    expect(sqls().at(-1)).toBe('commit');
+  });
+
+  it('ok on a failed issue that did not time out (or any other non-matching issue) is 404 and archives nothing', async () => {
+    withIssue(false); // the conditional update matches no row: e.g. failed with the printer's own error
+    const res = await post(`/agent/issues/${ISSUE_ID}/result`, { ok: true });
+    expect(res.status).toBe(404);
+    expect(sqls().some((s) => archiveSql.test(s))).toBe(false);
+    expect(sqls()).toContain('rollback');
+    expect(sqls()).not.toContain('commit');
+  });
+
+  it('a second late report is 404 (the first one already made it printed)', async () => {
+    let first = true;
+    clientQuery.mockImplementation(async (sql: string) => {
+      if (stateSql.test(sql)) {
+        const found = first;
+        first = false;
+        return found ? { rows: [{ article_ids: ['a1'] }], rowCount: 1 } : { rows: [], rowCount: 0 };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+    expect((await post(`/agent/issues/${ISSUE_ID}/result`, { ok: true })).status).toBe(204);
+    expect((await post(`/agent/issues/${ISSUE_ID}/result`, { ok: true })).status).toBe(404);
+  });
+
+  it('not ok never revives a timed-out issue: its update still requires status = \'printing\'', async () => {
+    withIssue(false);
+    const res = await post(`/agent/issues/${ISSUE_ID}/result`, { ok: false, error: 'jam' });
+    expect(res.status).toBe(404);
+    const issue = clientQuery.mock.calls.find(([s]) => stateSql.test(String(s)))!;
+    expect(String(issue[0])).toMatch(/set status = 'failed'/);
+    expect(String(issue[0])).toMatch(/status = 'printing'/);
+    expect(String(issue[0])).not.toMatch(/timed out/);
+  });
+
+  it('error text is cut by code points, not UTF-16 units (no split emoji)', async () => {
+    withIssue(true);
+    await post(`/agent/issues/${ISSUE_ID}/result`, { ok: false, error: '\u{1F5A8}'.repeat(600) });
+    const issue = clientQuery.mock.calls.find(([s]) => stateSql.test(String(s)))!;
+    const stored = issue[1][3] as string;
+    expect(Array.from(stored)).toHaveLength(500);
+    expect(stored).toBe('\u{1F5A8}'.repeat(500));
   });
 
   it('another device\'s issue, a wrong state or a second report is 404 and nothing is archived', async () => {
@@ -357,6 +417,24 @@ describe('GET /agent/issues/:id/pdf', () => {
     const res = await get('/agent/issues/not-a-uuid/pdf');
     expect(res.status).toBe(404);
     expect(find(/from issues/)).toBeUndefined();
+  });
+});
+
+describe('POST /agent/pair is not behind the device token', () => {
+  it('reaches its handler without a token: bad body -> 400, not 401', async () => {
+    const { devices } = await import('../src/print/devices.js');
+    const res = await devices.request('/agent/pair', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('the agent router does not claim it either: it is unknown there (404), never 401', async () => {
+    const res = await agent.request('/agent/pair', { method: 'POST', body: JSON.stringify({ code: 'ABCD2345' }) });
+    expect(res.status).toBe(404);
   });
 });
 

@@ -1,8 +1,7 @@
 import { Hono } from 'hono';
 import { pool } from '../db/client.js';
 import { requireUser, type UserEnv } from '../routes/library.js';
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { UUID_RE } from '../uuid.js';
 
 export const issues = new Hono<UserEnv>();
 issues.use('/me/issues', requireUser);

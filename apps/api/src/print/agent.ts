@@ -6,8 +6,8 @@ import { renderIssuePdf } from '../brew/issuePdf.js';
 import type { PaperLayout } from '../brew/layout.js';
 import type { BrewArticle } from '../brew/render.js';
 import { requireDevice, type DeviceEnv } from './devices.js';
+import { UUID_RE } from '../uuid.js';
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ERROR_MAX = 500;
 
 // `requireDevice` is applied per route, never as `use('/agent/*')`: POST /agent/pair is unauthenticated.
@@ -37,6 +37,8 @@ const ResultBody = z.object({ ok: z.boolean(), error: z.string().optional() });
 
 // The Mac reports how printing went. The state change is conditional on the issue still being this
 // device's printing issue, so a double report or another device's id is a 404 and changes nothing.
+// One exception: a success that arrives after the stale sweep failed the issue ('timed out') still
+// counts, because the paper did print. A failure report (ok: false) never revives a timed-out issue.
 agent.post('/agent/issues/:id/result', requireDevice, async (c) => {
   const id = c.req.param('id');
   if (!UUID_RE.test(id)) return c.json({ error: 'not found' }, 404);
@@ -51,8 +53,9 @@ agent.post('/agent/issues/:id/result', requireDevice, async (c) => {
     await client.query('begin');
     const update = body.data.ok
       ? await client.query<{ article_ids: string[] }>(
-          `update issues set status = 'printed', printed_at = now()
-           where id = $1 and status = 'printing' and claimed_by = $2 and user_id = $3
+          `update issues set status = 'printed', printed_at = now(), error = null
+           where id = $1 and claimed_by = $2 and user_id = $3
+             and (status = 'printing' or (status = 'failed' and error = 'timed out'))
            returning article_ids`,
           [id, deviceId, userId],
         )
@@ -60,7 +63,7 @@ agent.post('/agent/issues/:id/result', requireDevice, async (c) => {
           `update issues set status = 'failed', error = $4
            where id = $1 and status = 'printing' and claimed_by = $2 and user_id = $3
            returning article_ids`,
-          [id, deviceId, userId, (body.data.error?.trim() || 'The printer reported a failure').slice(0, ERROR_MAX)],
+          [id, deviceId, userId, Array.from(body.data.error?.trim() || 'The printer reported a failure').slice(0, ERROR_MAX).join('')],
         );
     const issue = update.rows[0];
     if (!issue) {
