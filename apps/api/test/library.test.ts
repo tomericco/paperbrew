@@ -44,6 +44,8 @@ describe('signed-in user routes without a session', () => {
     ['PUT', '/me/address', { body: JSON.stringify({ token: 'amber-otter' }), headers: { 'content-type': 'application/json' } }],
     ['PUT', '/me/settings', { body: JSON.stringify({ paperLayout: 'booklet' }), headers: { 'content-type': 'application/json' } }],
     ['GET', '/articles', undefined],
+    ['GET', '/me/print-devices', undefined],
+    ['POST', '/me/print-devices/pair-code', undefined],
     ['GET', '/brew', undefined],
     ['DELETE', ARTICLE, undefined],
     ['POST', '/articles/archive', { body: JSON.stringify({ ids: [ARTICLE.slice(10)] }), headers: { 'content-type': 'application/json' } }],
@@ -143,6 +145,20 @@ describe('paper layout setting', () => {
       expect((await on.json()).gmailAvailable).toBe(true);
     } finally {
       process.env = original;
+    }
+  });
+
+  it('GET /me returns macAppUrl from MAC_APP_URL, or null', async () => {
+    signedIn();
+    const off = await app.request('/me', { headers: { cookie: 'better-auth.session_token=x' } });
+    expect((await off.json()).macAppUrl).toBeNull();
+
+    (config as { MAC_APP_URL?: string }).MAC_APP_URL = 'https://example.com/Paperbrew.dmg';
+    try {
+      const on = await app.request('/me', { headers: { cookie: 'better-auth.session_token=x' } });
+      expect((await on.json()).macAppUrl).toBe('https://example.com/Paperbrew.dmg');
+    } finally {
+      delete (config as { MAC_APP_URL?: string }).MAC_APP_URL;
     }
   });
 

@@ -1006,6 +1006,47 @@ button:disabled {
   overflow-wrap: anywhere;
 }
 
+.printer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.printer-help {
+  padding: 10px 14px;
+  border: 1px solid #e6e6e6;
+  border-radius: 4px;
+}
+
+.printer-help p:last-of-type {
+  margin-bottom: 8px;
+}
+
+.printer-code-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.printer-code {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  user-select: all;
+}
+
+.decision .badge-failed {
+  border-color: #b00020;
+  color: #b00020;
+}
+
+.decision-body button {
+  justify-self: start;
+  margin-top: 6px;
+}
+
 /* Phones and other touch screens. Every page is built phone-first: check new UI at 375px wide. */
 
 @media (pointer: coarse) {

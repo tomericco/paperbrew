@@ -19,7 +19,7 @@ const REASONS: Record<string, string> = {
 };
 
 /** "5 minutes ago", "yesterday", "just now". */
-function relativeTime(iso: string): string {
+export function relativeTime(iso: string): string {
   const seconds = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
   if (seconds < 60) return 'just now';
   const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });

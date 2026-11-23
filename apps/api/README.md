@@ -83,6 +83,7 @@ The API runs as one Vercel Node.js function (`api/index.ts`); `vercel.json` rout
 - `INBOUND_WEBHOOK_USER`, `INBOUND_WEBHOOK_PASSWORD`
 - `CRON_SECRET` (Vercel sends it to the cron as a bearer token; without it the endpoint answers 401)
 - `AUTOBREW_ENABLED` (optional, off by default until the print agent ships; set to `true` to test scheduled issues)
+- `MAC_APP_URL` (optional: where the Mac app is downloaded. Settings shows the Printer section only when it is set)
 - `BETTER_AUTH_SECRET` (32+ chars) and `BETTER_AUTH_URL` (the **web** origin, e.g. `https://paperbrew-web.vercel.app`)
 - Sign-in providers, each enabled only when both are set: `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET`, `REDDIT_CLIENT_ID`/`_SECRET`. Callback URLs are `$BETTER_AUTH_URL/api/auth/callback/{google|github|reddit}`.
 
@@ -90,7 +91,7 @@ The API runs as one Vercel Node.js function (`api/index.ts`); `vercel.json` rout
 
 ### What the tick does
 
-Every hour Supabase calls `GET /cron/tick`. It queues a `gmail_sync` job for every active Gmail connection that doesn't already have one waiting. When `AUTOBREW_ENABLED=true` it also queues a `create_issue` job for every user whose brewing schedule has an open slot (a user who already has one waiting is skipped; `create_issue` re-checks the slot under a row lock and queues an issue of the oldest ready articles that fit the reading-time budget). Then it runs the jobs that are due. The daily Vercel cron (`/cron/run-jobs`) stays as a safety net for anything left over. Both endpoints need `Authorization: Bearer $CRON_SECRET` and answer 401 without it.
+Every hour Supabase calls `GET /cron/tick`. It queues a `gmail_sync` job for every active Gmail connection that doesn't already have one waiting. When `AUTOBREW_ENABLED=true` it also queues a `create_issue` job for every user whose brewing schedule has an open slot (a user who already has one waiting is skipped; `create_issue` re-checks the slot under a row lock and queues an issue of the oldest ready articles that fit the reading-time budget). Then it runs the jobs that are due. It also fails any issue stuck `printing` for over 30 minutes (`error = 'timed out'`, reported as `stale`), even with `AUTOBREW_ENABLED` off, so it can be printed again. The daily Vercel cron (`/cron/run-jobs`) stays as a safety net for anything left over. Both endpoints need `Authorization: Bearer $CRON_SECRET` and answer 401 without it.
 
 ### Schedule it
 
@@ -132,6 +133,23 @@ select cron.unschedule('paperbrew-tick');
 
 Gmail features appear only when `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GMAIL_TOKEN_KEY` are all set.
 
+## Print agent API
+
+The Mac app (a local agent) prints queued issues. It talks to these routes; everything else in this section is its contract. Tables: `issues`, `print_devices` (one row per paired Mac, only the SHA-256 of its token), `print_pair_codes` (single-use codes, 10 minutes, only the hash).
+
+**Pairing.** Signed-in Settings calls `POST /me/print-devices/pair-code` and opens the deep link `paperbrew://pair?code=XXXXXXXX&api=<url-encoded BETTER_AUTH_URL>`. The `api` value is the **web** origin, not the API's: the agent must call `<api>/api/agent/...` (the web proxy strips `/api`), never `<api>/agent/...`. One Mac per user: a successful pairing revokes the user's other devices.
+
+| Route | Auth | Answers |
+|---|---|---|
+| `POST /agent/pair` `{ code, name? }` | none (the code is the credential) | `201 { token, deviceId }` (the token is shown once) · `400` bad body · `410` code expired, used or unknown |
+| `POST /agent/jobs/claim` | bearer | `200 { id, layout }` for the user's oldest queued issue, now `printing` · `204` nothing queued |
+| `GET /agent/issues/:id/pdf` | bearer | `200` the PDF · `204` nothing left to print (every article was archived since; the issue is **already marked printed**, so the Mac must **not** report a result) · `404` not this device's printing issue · `503` + `Retry-After: 30` while another brew renders (retry; the issue stays `printing`) · `500` render failed |
+| `POST /agent/issues/:id/result` `{ ok, error? }` | bearer | `204` recorded · `404` not this device's printing issue, or already reported · `400` bad body |
+
+- **Auth:** `Authorization: Bearer <token>` on every route except pairing. `401` means the device was revoked (or the token is unknown): stop and ask the user to pair again.
+- **States:** `queued` → `printing` (claimed) → `printed` or `failed`. `ok: true` marks the issue printed and archives its articles; `ok: false` marks it failed with `error` (cut to 500 characters). A failed issue can be printed again from Settings.
+- **Timeout:** an issue `printing` for over 30 minutes is failed with `error = 'timed out'` by the stale sweep in `/cron/tick`, so the Mac must report within 30 minutes of claiming. A success reported late for a `timed out` issue still counts (`ok: true` makes it `printed` and archives its articles); a late `ok: false` is a `404`.
+
 ## Security notes
 
 - **Addresses are secret.** Tokens are three random words, so anyone who knows an address can add to that library. Set `REQUIRE_KNOWN_SENDER=true` to accept only the account email and verified aliases (`sender_aliases`). To rotate an address, set `disabled_at` and issue a new token.
@@ -149,7 +167,13 @@ src/
   cron/tick.ts            hourly tick: queues a gmail_sync per active connection and (AUTOBREW_ENABLED) a create_issue per due schedule
   schedule/               brewing schedule: slot maths (schedule.ts), issue picking (pick.ts), create_issue job (createIssue.ts)
   routes/library.ts       /me, /me/address, /me/settings, /me/schedule, /articles (signed-in user)
+  print/devices.ts        pairing: /me/print-devices (pair-code, list, remove), POST /agent/pair, requireDevice (bearer-token middleware)
+  print/agent.ts          the Mac app's routes: /agent/jobs/claim, /agent/issues/:id/pdf and /result
+  print/issues.ts         GET /me/issues (last 10), POST /me/issues/:id/reprint (failed issue back to queued; 409 if nothing is left)
+  print/secrets.ts        pair codes, device tokens, sha256
+  uuid.ts                 UUID_RE, shared by the routes that take an id in the path
   brew/                   GET /brew: articles to a PDF magazine
+  brew/issuePdf.ts        renderIssuePdf: articles to a flat or booklet PDF stream (GET /brew and the print agent)
   server.ts               local server (npm run dev)
   inbound/cloudmailin.ts  CloudMailin JSON (Normalized) payload → InboundEmail
   inbound/postmark.ts     Postmark payload → InboundEmail (add other providers next to these)
@@ -160,7 +184,7 @@ src/
   extract/                Readability extraction + sanitizing
   pipeline/               process_email, fetch_article
   jobs/                   Postgres job queue (SKIP LOCKED), runner (runOne, drain), local worker
-  db/schema.sql           tables
+  db/schema.sql           tables (incl. issues, print_devices, print_pair_codes)
 ```
 
 ## Next steps

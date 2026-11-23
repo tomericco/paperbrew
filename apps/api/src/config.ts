@@ -39,6 +39,12 @@ const Env = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((v) => v === 'true'),
+  // Where people download the Mac app (offered in Settings once printing exists). Optional.
+  MAC_APP_URL: z
+    .string()
+    .optional()
+    .transform((v) => v || undefined)
+    .pipe(z.string().url().optional()),
   // Required for GET /cron/run-jobs; without it the endpoint always answers 401.
   CRON_SECRET: z
     .string()

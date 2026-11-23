@@ -4,9 +4,10 @@ import { Layout } from '../Layout';
 import { errorText, LAYOUTS } from './layouts';
 import type { PaperLayout } from './layouts';
 import { GmailSection } from './settings/GmailSection';
+import { PrinterSection } from './settings/PrinterSection';
 import { ScheduleSection } from './settings/ScheduleSection';
 
-type Me = { paperLayout: PaperLayout; gmailAvailable: boolean; scheduleAvailable: boolean };
+type Me = { paperLayout: PaperLayout; gmailAvailable: boolean; scheduleAvailable: boolean; macAppUrl: string | null };
 
 const NOTICES: Record<string, string> = {
   connected: 'Gmail connected. New newsletters will appear within the hour.',
@@ -91,6 +92,7 @@ function SettingsContent({ name }: { name: string }) {
           ) : (
             <>
               <PaperSection initial={me.paperLayout} />
+              {me.macAppUrl && <PrinterSection macAppUrl={me.macAppUrl} />}
               {me.scheduleAvailable && <ScheduleSection />}
               {me.gmailAvailable && <GmailSection />}
             </>

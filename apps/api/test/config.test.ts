@@ -34,3 +34,18 @@ describe('AUTOBREW_ENABLED', () => {
     expect((await load({ AUTOBREW_ENABLED: 'true' })).AUTOBREW_ENABLED).toBe(true);
   });
 });
+
+describe('MAC_APP_URL', () => {
+  it('is undefined when unset or empty', async () => {
+    expect((await load({})).MAC_APP_URL).toBeUndefined();
+    expect((await load({ MAC_APP_URL: '' })).MAC_APP_URL).toBeUndefined();
+  });
+
+  it('keeps a valid URL', async () => {
+    expect((await load({ MAC_APP_URL: 'https://example.com/Paperbrew.dmg' })).MAC_APP_URL).toBe('https://example.com/Paperbrew.dmg');
+  });
+
+  it('rejects something that is not a URL', async () => {
+    await expect(load({ MAC_APP_URL: 'not a url' })).rejects.toThrow();
+  });
+});

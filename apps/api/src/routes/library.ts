@@ -10,11 +10,10 @@ import { gmailAvailable } from '../gmail/available.js';
 import { senderEmail } from '../gmail/rules.js';
 import { formatAddress, normalizeToken } from '../inbound/address.js';
 import { isBrewDue, nextBrewAt } from '../schedule/schedule.js';
+import { UUID_RE } from '../uuid.js';
 
 /** Hono env for routes behind `requireUser`: `c.get('userId')` is our `users.id`. */
 export type UserEnv = { Variables: { userId: string } };
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function findUserId(authUserId: string): Promise<string | undefined> {
   const { rows } = await pool.query<{ id: string }>('select id from users where auth_user_id = $1', [authUserId]);
@@ -67,6 +66,7 @@ library.get('/me', async (c) => {
     paperLayout: row.paper_layout,
     gmailAvailable: gmailAvailable(process.env),
     scheduleAvailable: config.AUTOBREW_ENABLED,
+    macAppUrl: config.MAC_APP_URL ?? null,
   });
 });
 

@@ -73,26 +73,53 @@ describe('GET /cron/tick', () => {
     const res = await app.request('/cron/tick', { headers: BEARER });
 
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, gmail: 3, brews: 0, ran: 5 });
-    expect(query).toHaveBeenCalledTimes(2);
+    expect(await res.json()).toEqual({ ok: true, gmail: 3, stale: 3, brews: 0, ran: 5 });
+    expect(query).toHaveBeenCalledTimes(3);
     const sql = String(query.mock.calls[0][0]);
     expect(sql).toMatch(/insert into jobs/);
     expect(sql).toContain('gmail_connections');
     expect(sql).toContain("status = 'active'");
     expect(sql).toContain('not exists');
     expect(drain).toHaveBeenCalledTimes(1);
-    expect(order).toEqual(['enqueue', 'enqueue', 'drain']);
+    expect(order).toEqual(['enqueue', 'enqueue', 'enqueue', 'drain']);
   });
 });
 
 describe('tick() with AUTOBREW_ENABLED off', () => {
-  it('skips the brew step: no users query, brews 0, gmail still queued', async () => {
+  it('skips the brew step: no users query, brews 0, gmail still queued, stale sweep still runs', async () => {
     cfg.AUTOBREW_ENABLED = false;
     const query = vi.fn(async () => ({ rowCount: 2, rows: [] }));
-    expect(await tick({ query } as never, new Date('2026-11-23T08:30:00Z'))).toEqual({ gmail: 2, brews: 0 });
-    expect(query).toHaveBeenCalledTimes(1);
+    expect(await tick({ query } as never, new Date('2026-11-23T08:30:00Z'))).toEqual({ gmail: 2, brews: 0, stale: 2 });
+    expect(query).toHaveBeenCalledTimes(2);
     expect(String(query.mock.calls[0][0])).toContain('gmail_sync');
+    expect(String(query.mock.calls[1][0])).toContain('update issues');
     expect(query.mock.calls.some((c) => /from users/.test(String(c[0])))).toBe(false);
+  });
+});
+
+describe('tick() stale sweep', () => {
+  const NOW = new Date('2026-11-23T08:30:00Z');
+  const sweepDb = (stale: number | null) => ({
+    query: vi.fn(async (sql: string) =>
+      /update issues/.test(sql) ? { rowCount: stale, rows: [] } : { rowCount: 0, rows: [] },
+    ),
+  });
+
+  it.each([true, false])('fails issues stuck printing for 30 minutes (AUTOBREW_ENABLED %s)', async (enabled) => {
+    cfg.AUTOBREW_ENABLED = enabled;
+    const db = sweepDb(2);
+    const result = await tick(db as never, NOW);
+    expect(result.stale).toBe(2);
+    const sweeps = db.query.mock.calls.map((c) => String(c[0])).filter((s) => /update issues/.test(s));
+    expect(sweeps).toHaveLength(1);
+    expect(sweeps[0]).toContain("status = 'failed'");
+    expect(sweeps[0]).toContain("error = 'timed out'");
+    expect(sweeps[0]).toContain("status = 'printing'");
+    expect(sweeps[0]).toContain("claimed_at < now() - interval '30 minutes'");
+  });
+
+  it('reports 0 stale when the driver gives no rowCount', async () => {
+    expect((await tick(sweepDb(null) as never, NOW)).stale).toBe(0);
   });
 });
 
@@ -116,12 +143,12 @@ describe('tick()', () => {
 
   it('returns the number of gmail rows inserted and the brews queued', async () => {
     const db = fakeDb([due('u1'), due('u2')]);
-    expect(await tick(db as never, NOW)).toEqual({ gmail: 2, brews: 2 });
+    expect(await tick(db as never, NOW)).toEqual({ gmail: 2, brews: 2, stale: 1 });
   });
 
   it('reports 0 gmail when the driver gives no rowCount', async () => {
     const db = fakeDb([], null);
-    expect(await tick(db as never, NOW)).toEqual({ gmail: 0, brews: 0 });
+    expect(await tick(db as never, NOW)).toEqual({ gmail: 0, brews: 0, stale: 1 });
   });
 
   it('loads enabled users without an undone create_issue job and queues only the due ones', async () => {
@@ -131,7 +158,7 @@ describe('tick()', () => {
       due('u-done', { last_brew_at: new Date('2026-11-23T07:10:00Z') }),
       due('u-stale', { brew_days: [1], brew_hour: 1 }),
     ]);
-    expect(await tick(db as never, NOW)).toEqual({ gmail: 2, brews: 1 });
+    expect(await tick(db as never, NOW)).toEqual({ gmail: 2, brews: 1, stale: 1 });
 
     const select = db.query.mock.calls.map((c) => String(c[0])).find((s) => /from users/.test(s))!;
     expect(select).toContain('brew_enabled');

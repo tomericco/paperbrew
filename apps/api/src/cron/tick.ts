@@ -6,12 +6,12 @@ import { isBrewDue } from '../schedule/schedule.js';
 
 /**
  * The enqueue step of the hourly tick. Returns how many jobs each step queued so the route can report them;
- * later steps (stale sweep) add a field here. It does not run jobs: the route drains afterwards.
+ * `stale` counts printing issues the Mac never reported on. It does not run jobs: the route drains afterwards.
  */
 export async function tick(
   db: pg.Pool | pg.PoolClient = pool,
   now: Date = new Date(),
-): Promise<{ gmail: number; brews: number }> {
+): Promise<{ gmail: number; brews: number; stale: number }> {
   // One gmail_sync per active connection, unless that user already has one waiting or running.
   const { rowCount } = await db.query(
     `insert into jobs (type, payload)
@@ -24,8 +24,16 @@ export async function tick(
        )`,
   );
 
+  // An issue the Mac claimed but never reported on (asleep, offline, crashed) is failed so it can be printed again.
+  // This runs before the AUTOBREW_ENABLED gate: it must work with scheduling off.
+  const sweep = await db.query(
+    `update issues set status = 'failed', error = 'timed out'
+     where status = 'printing' and claimed_at < now() - interval '30 minutes'`,
+  );
+  const stale = sweep.rowCount ?? 0;
+
   // Scheduled issues stay off until the print agent exists (AUTOBREW_ENABLED), so nothing piles up queued.
-  if (!config.AUTOBREW_ENABLED) return { gmail: rowCount ?? 0, brews: 0 };
+  if (!config.AUTOBREW_ENABLED) return { gmail: rowCount ?? 0, brews: 0, stale };
 
   // One create_issue per enabled user whose slot is open, unless one is already waiting or running.
   // Whether the slot is open is decided here in JS; createIssue re-checks it under a row lock.
@@ -51,5 +59,5 @@ export async function tick(
     await enqueue(db, 'create_issue', { id: u.id });
     brews++;
   }
-  return { gmail: rowCount ?? 0, brews };
+  return { gmail: rowCount ?? 0, brews, stale };
 }
