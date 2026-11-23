@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.17",
+    "@huggingface/transformers": "^4.3.2",
     "@mozilla/readability": "^0.6.0",
     "@sparticuz/chromium": "153.0.0",
     "@vercel/functions": "^3.10.5",

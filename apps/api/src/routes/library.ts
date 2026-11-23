@@ -6,6 +6,8 @@ import { provisionUser } from '../auth/provision.js';
 import { PAPER_LAYOUTS, type PaperLayout } from '../brew/layout.js';
 import { config } from '../config.js';
 import { isUniqueViolation, pool } from '../db/client.js';
+import { gmailAvailable } from '../gmail/available.js';
+import { senderEmail } from '../gmail/rules.js';
 import { formatAddress, normalizeToken } from '../inbound/address.js';
 
 /** Hono env for routes behind `requireUser`: `c.get('userId')` is our `users.id`. */
@@ -58,7 +60,12 @@ library.get('/me', async (c) => {
   );
   const row = rows[0];
   if (!row) return c.json({ error: 'no active address' }, 500);
-  return c.json({ ...addressOf(row.token), email: row.email, paperLayout: row.paper_layout });
+  return c.json({
+    ...addressOf(row.token),
+    email: row.email,
+    paperLayout: row.paper_layout,
+    gmailAvailable: gmailAvailable(process.env),
+  });
 });
 
 const AddressBody = z.object({ token: z.string() });
@@ -126,6 +133,7 @@ type ArticleRow = {
   source_url: string | null;
   status: string;
   word_count: number | null;
+  added_via: string;
   created_at: Date;
   archived_at?: Date;
 };
@@ -137,6 +145,7 @@ const toArticle = (r: ArticleRow) => ({
   sourceUrl: r.source_url,
   status: r.status,
   wordCount: r.word_count,
+  addedVia: r.added_via,
   createdAt: r.created_at,
 });
 
@@ -144,7 +153,7 @@ library.get('/articles', async (c) => {
   const userId = c.get('userId');
   if (c.req.query('archived') === '1') {
     const { rows } = await pool.query<ArticleRow & { archived_at: Date }>(
-      `select id, title, site_name, source_url, status, word_count, created_at, archived_at
+      `select id, title, site_name, source_url, status, word_count, added_via, created_at, archived_at
        from articles
        where user_id = $1 and archived_at is not null
        order by archived_at desc, created_at asc
@@ -154,7 +163,7 @@ library.get('/articles', async (c) => {
     return c.json({ articles: rows.map((r) => ({ ...toArticle(r), archivedAt: r.archived_at })) });
   }
   const { rows } = await pool.query<ArticleRow>(
-    `select id, title, site_name, source_url, status, word_count, created_at
+    `select id, title, site_name, source_url, status, word_count, added_via, created_at
      from articles
      where user_id = $1 and archived_at is null
      order by created_at desc
@@ -194,7 +203,28 @@ library.post('/articles/:id/unarchive', async (c) => {
 library.delete('/articles/:id', async (c) => {
   const id = c.req.param('id');
   if (!UUID_RE.test(id)) return c.json({ error: 'not found' }, 404);
-  const { rowCount } = await pool.query('delete from articles where id = $1 and user_id = $2', [id, c.get('userId')]);
+  const userId = c.get('userId');
+
+  // "Also skip future emails from this sender": only for a Gmail article, and only when asked.
+  if (c.req.query('blockSender') === '1') {
+    const { rows } = await pool.query<{ from_email: string | null }>(
+      `select m.from_email
+       from articles a
+       join gmail_messages m on m.user_id = a.user_id and m.gmail_message_id = a.gmail_message_id
+       where a.id = $1 and a.user_id = $2 and a.added_via = 'gmail'`,
+      [id, userId],
+    );
+    const from = rows[0]?.from_email;
+    const email = from ? senderEmail(from) : '';
+    if (email) {
+      await pool.query(
+        'insert into gmail_blocked_senders (user_id, email) values ($1, $2) on conflict do nothing',
+        [userId, email],
+      );
+    }
+  }
+
+  const { rowCount } = await pool.query('delete from articles where id = $1 and user_id = $2', [id, userId]);
   if (!rowCount) return c.json({ error: 'not found' }, 404);
   return c.body(null, 204);
 });

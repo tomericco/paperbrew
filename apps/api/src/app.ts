@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { pool } from './db/client.js';
 import { enqueue } from './jobs/queue.js';
 import { drain } from './jobs/runner.js';
+import { tick } from './cron/tick.js';
 import { normalizePostmark } from './inbound/postmark.js';
 import { normalizeCloudmailin } from './inbound/cloudmailin.js';
 import type { InboundEmail } from './inbound/types.js';
@@ -14,6 +15,8 @@ import { auth } from './auth/auth.js';
 import { enabledProviders } from './auth/providers.js';
 import { library } from './routes/library.js';
 import { brew } from './brew/route.js';
+import { gmail } from './gmail/routes.js';
+import { MODEL_ID, zeroShot } from './gmail/model.js';
 
 export const app = new Hono();
 
@@ -36,6 +39,9 @@ app.route('/', library);
 
 // GET /brew: the signed-in user's magazine as a PDF.
 app.route('/', brew);
+
+// Gmail newsletters: GET /gmail/connect, GET /gmail/callback, GET and DELETE /me/gmail.
+app.route('/', gmail);
 
 const webhookAuth = basicAuth({ username: config.INBOUND_WEBHOOK_USER, password: config.INBOUND_WEBHOOK_PASSWORD });
 
@@ -122,4 +128,30 @@ app.get('/cron/run-jobs', async (c) => {
   if (!secret || c.req.header('authorization') !== `Bearer ${secret}`) return c.json({ ok: false }, 401);
   const ran = await drain(DRAIN);
   return c.json({ ok: true, ran });
+});
+
+// Hourly (Supabase pg_cron, see README): queue a gmail_sync per active connection, then run what's due.
+app.get('/cron/tick', async (c) => {
+  const secret = config.CRON_SECRET;
+  if (!secret || c.req.header('authorization') !== `Bearer ${secret}`) return c.json({ ok: false }, 401);
+  const queued = await tick();
+  const ran = await drain(DRAIN);
+  return c.json({ ok: true, ...queued, ran });
+});
+
+// Spike: proves the zero-shot model loads and runs inside a Vercel function.
+app.get('/cron/model-check', async (c) => {
+  const secret = config.CRON_SECRET;
+  if (!secret || c.req.header('authorization') !== `Bearer ${secret}`) return c.json({ ok: false }, 401);
+  const t0 = Date.now();
+  try {
+    const { labels } = await zeroShot('Our spring sale: 30% off every plan this weekend only.', [
+      'an essay, analysis or reporting',
+      'a sales promotion or discount',
+    ]);
+    return c.json({ ok: true, model: MODEL_ID, top: labels[0], ms: Date.now() - t0 });
+  } catch (err) {
+    // The message only: it says why the model did not load without a stack or any secret.
+    return c.json({ ok: false, error: err instanceof Error ? err.message : 'model check failed' }, 500);
+  }
 });

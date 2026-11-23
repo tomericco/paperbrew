@@ -104,6 +104,43 @@ create table if not exists jobs (
 );
 create index if not exists jobs_ready_idx on jobs (run_at) where done_at is null;
 
+-- Gmail newsletter sync (read-only OAuth). The refresh token is stored encrypted (GMAIL_TOKEN_KEY).
+create table if not exists gmail_connections (
+  user_id            uuid primary key references users(id) on delete cascade,
+  google_email       text not null,
+  refresh_token_enc  text not null,
+  history_id         text not null,
+  status             text not null default 'active' check (status in ('active', 'needs_reconnect')),
+  connected_at       timestamptz not null default now(),
+  last_synced_at     timestamptz,
+  last_error         text
+);
+
+-- Every message the classifier has seen, so each is judged once.
+create table if not exists gmail_messages (
+  user_id           uuid not null references users(id) on delete cascade,
+  gmail_message_id  text not null,
+  decision          text not null check (decision in ('rule_skip', 'not_editorial', 'editorial')),
+  reason            text,
+  from_email        text,
+  subject           text,
+  seen_at           timestamptz not null default now(),
+  primary key (user_id, gmail_message_id)
+);
+
+create table if not exists gmail_blocked_senders (
+  user_id  uuid not null references users(id) on delete cascade,
+  email    text not null,
+  primary key (user_id, email)
+);
+
+alter table articles add column if not exists gmail_message_id text;
+alter table articles add column if not exists message_id text;
+create unique index if not exists articles_user_gmail_uq
+  on articles (user_id, gmail_message_id) where gmail_message_id is not null;
+alter table articles drop constraint if exists articles_added_via_check;
+alter table articles add constraint articles_added_via_check check (added_via in ('email', 'web', 'gmail'));
+
 -- Better Auth tables (modelName auth_*). Columns are Better Auth 1.7's own camelCase names,
 -- generated with its Postgres migration compiler and made idempotent. Don't rename them.
 create table if not exists auth_users (
@@ -167,3 +204,6 @@ alter table auth_users enable row level security;
 alter table auth_sessions enable row level security;
 alter table auth_accounts enable row level security;
 alter table auth_verifications enable row level security;
+alter table gmail_connections enable row level security;
+alter table gmail_messages enable row level security;
+alter table gmail_blocked_senders enable row level security;

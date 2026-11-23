@@ -20,6 +20,20 @@ vi.mock('../src/config.js', () => ({
 const { app } = await import('../src/app.js');
 const { auth } = await import('../src/auth/auth.js');
 const { pool } = await import('../src/db/client.js');
+const { gmailAvailable } = await import('../src/gmail/available.js');
+
+describe('gmailAvailable', () => {
+  const full = { GMAIL_TOKEN_KEY: 'k', GOOGLE_CLIENT_ID: 'id', GOOGLE_CLIENT_SECRET: 'secret' };
+
+  it('is true when the token key and the Google client pair are all set', () => {
+    expect(gmailAvailable(full)).toBe(true);
+  });
+
+  it.each(Object.keys(full))('is false when %s is missing or empty', (key) => {
+    expect(gmailAvailable({ ...full, [key]: undefined })).toBe(false);
+    expect(gmailAvailable({ ...full, [key]: '' })).toBe(false);
+  });
+});
 
 describe('signed-in user routes without a session', () => {
   const ARTICLE = '/articles/00000000-0000-0000-0000-000000000000';
@@ -92,6 +106,24 @@ describe('paper layout setting', () => {
     const res = await app.request('/me', { headers: { cookie: 'better-auth.session_token=x' } });
     expect(res.status).toBe(200);
     expect((await res.json()).paperLayout).toBe('booklet');
+  });
+
+  it('GET /me returns gmailAvailable from the environment', async () => {
+    const original = { ...process.env };
+    try {
+      delete process.env.GMAIL_TOKEN_KEY;
+      signedIn();
+      const off = await app.request('/me', { headers: { cookie: 'better-auth.session_token=x' } });
+      expect((await off.json()).gmailAvailable).toBe(false);
+
+      process.env.GMAIL_TOKEN_KEY = 'k';
+      process.env.GOOGLE_CLIENT_ID = 'id';
+      process.env.GOOGLE_CLIENT_SECRET = 'secret';
+      const on = await app.request('/me', { headers: { cookie: 'better-auth.session_token=x' } });
+      expect((await on.json()).gmailAvailable).toBe(true);
+    } finally {
+      process.env = original;
+    }
   });
 
   it('PUT /me/settings saves the layout', async () => {
@@ -219,5 +251,77 @@ describe('archiving articles', () => {
     const query = signedIn();
     expect((await unarchive('nope')).status).toBe(404);
     expect(articleSql(query)).toHaveLength(0);
+  });
+});
+
+describe('deleting articles and blocking senders', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const A = '11111111-1111-4111-8111-111111111111';
+  const cookie = { cookie: 'better-auth.session_token=x' };
+  const ROW = { id: A, title: 'T', site_name: 's', source_url: 'https://x.test', status: 'ready', word_count: 10, created_at: new Date('2026-11-01T00:00:00Z') };
+
+  /** `sender` is what the gmail_messages lookup returns (undefined: not a Gmail article). */
+  const signedIn = (sender?: string) => {
+    vi.spyOn(auth.api, 'getSession').mockResolvedValue({
+      user: { id: 'auth-1', email: 'a@example.com' },
+      session: {},
+    } as never);
+    return vi.spyOn(pool, 'query').mockImplementation((async (sql: string) => {
+      if (/from users where auth_user_id/.test(sql)) return { rows: [{ id: 'user-1' }] };
+      if (/gmail_messages/.test(sql) && /^\s*select/i.test(sql)) {
+        return { rows: sender === undefined ? [] : [{ from_email: sender }] };
+      }
+      if (/delete from articles/.test(sql)) return { rows: [], rowCount: 1 };
+      if (/from articles/.test(sql)) return { rows: [{ ...ROW, added_via: 'gmail' }] };
+      return { rows: [], rowCount: 0 };
+    }) as never);
+  };
+
+  const blocks = (query: ReturnType<typeof signedIn>) =>
+    query.mock.calls.filter(([sql]) => /insert into gmail_blocked_senders/.test(String(sql)));
+
+  const del = (qs = '') => app.request(`/articles/${A}${qs}`, { method: 'DELETE', headers: cookie });
+
+  it('GET /articles rows include addedVia', async () => {
+    signedIn();
+    const res = await app.request('/articles', { headers: cookie });
+    expect((await res.json()).articles[0].addedVia).toBe('gmail');
+  });
+
+  it('GET /articles?archived=1 rows include addedVia', async () => {
+    signedIn();
+    const res = await app.request('/articles?archived=1', { headers: cookie });
+    expect((await res.json()).articles[0].addedVia).toBe('gmail');
+  });
+
+  it('blockSender=1 on a Gmail article blocks the bare, lowercased sender before deleting', async () => {
+    const query = signedIn('Some Letter <News@Example.COM>');
+    const res = await del('?blockSender=1');
+    expect(res.status).toBe(204);
+    const [block] = blocks(query);
+    expect(block![1]).toEqual(['user-1', 'news@example.com']);
+    expect(String(block![0])).toMatch(/on conflict do nothing/i);
+    const sqls = query.mock.calls.map(([sql]) => String(sql));
+    const at = (re: RegExp) => sqls.findIndex((s) => re.test(s));
+    expect(at(/insert into gmail_blocked_senders/)).toBeLessThan(at(/delete from articles/));
+    const lookup = query.mock.calls.find(([sql]) => /gmail_messages/.test(String(sql)) && /^\s*select/i.test(String(sql)))!;
+    expect(String(lookup[0])).toContain("added_via = 'gmail'");
+    expect(lookup[1]).toEqual([A, 'user-1']);
+  });
+
+  it('blockSender=1 on a non-Gmail article blocks nothing but still deletes', async () => {
+    const query = signedIn(undefined);
+    const res = await del('?blockSender=1');
+    expect(res.status).toBe(204);
+    expect(blocks(query)).toHaveLength(0);
+    expect(query.mock.calls.some(([sql]) => /delete from articles/.test(String(sql)))).toBe(true);
+  });
+
+  it('without the flag nothing is blocked', async () => {
+    const query = signedIn('news@example.com');
+    const res = await del();
+    expect(res.status).toBe(204);
+    expect(blocks(query)).toHaveLength(0);
   });
 });

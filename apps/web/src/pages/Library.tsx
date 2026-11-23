@@ -6,15 +6,10 @@ import { ArchivedList } from './ArchivedList';
 import { ArticleTitle, articleMeta } from './article';
 import type { Article } from './article';
 import { BrewedDialog } from './BrewedDialog';
-
-type PaperLayout = 'flat' | 'booklet';
+import { errorText, LAYOUTS } from './layouts';
+import type { PaperLayout } from './layouts';
 
 type Me = { address: string; token: string; email: string | null; paperLayout: PaperLayout };
-
-const LAYOUTS: { value: PaperLayout; label: string; hint: string }[] = [
-  { value: 'flat', label: 'Flat A4', hint: 'Single pages, staple in the corner.' },
-  { value: 'booklet', label: 'Booklet (A4, folded)', hint: 'Print two-sided, flip on short edge, fold and staple.' },
-];
 
 type Tab = 'saved' | 'archived';
 
@@ -25,15 +20,6 @@ const TABS: { value: Tab; label: string; heading: string }[] = [
 
 function tabFromUrl(): Tab {
   return new URLSearchParams(location.search).get('tab') === 'archived' ? 'archived' : 'saved';
-}
-
-async function errorText(res: Response, fallback: string): Promise<string> {
-  try {
-    const body = (await res.json()) as { error?: string };
-    return body.error ?? fallback;
-  } catch {
-    return fallback;
-  }
 }
 
 export function Library() {
@@ -268,10 +254,16 @@ function LibraryContent({ name }: { name: string }) {
     location.assign('/');
   }
 
-  async function remove(id: string) {
+  async function remove(article: Article) {
+    // A Gmail article can also stop its sender: the server then skips that address from now on.
+    let query = '';
+    if (article.addedVia === 'gmail') {
+      const who = article.siteName ?? 'this sender';
+      if (confirm(`Also skip future emails from ${who}?`)) query = '?blockSender=1';
+    }
     try {
-      const res = await fetch(`/api/articles/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      if (res.ok || res.status === 404) setArticles((prev) => prev?.filter((a) => a.id !== id) ?? prev);
+      const res = await fetch(`/api/articles/${encodeURIComponent(article.id)}${query}`, { method: 'DELETE' });
+      if (res.ok || res.status === 404) setArticles((prev) => prev?.filter((a) => a.id !== article.id) ?? prev);
     } catch {
       // leave the row; the user can retry
     }
@@ -300,6 +292,9 @@ function LibraryContent({ name }: { name: string }) {
         </span>
       )}
       <span className="who">{name}</span>
+      <a className="btn" href="/app/settings">
+        Settings
+      </a>
       <button type="button" onClick={signOut}>
         Sign out
       </button>
@@ -398,7 +393,7 @@ function LibraryContent({ name }: { name: string }) {
                           <ArticleTitle article={article} />
                           <span className="meta">{articleMeta(article)}</span>
                         </div>
-                        <button type="button" className="btn-quiet" onClick={() => remove(article.id)}>
+                        <button type="button" className="btn-quiet" onClick={() => void remove(article)}>
                           Remove
                         </button>
                       </li>

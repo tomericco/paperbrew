@@ -2,6 +2,7 @@ import { pool } from '../db/client.js';
 import { enqueue } from '../jobs/queue.js';
 import { planEmail } from '../inbound/plan.js';
 import type { InboundEmail } from '../inbound/types.js';
+import { findDuplicateNewsletter } from '../inbound/dedupe.js';
 import { extractNewsletter } from '../extract/readable.js';
 
 /** Turn one stored inbound email into article rows (links are fetched later by their own jobs). */
@@ -41,22 +42,28 @@ export async function processEmail(inboundEmailId: string): Promise<void> {
     }
 
     let newsletterSaved = false;
+    let duplicate = false;
     if (plan.newsletter) {
-      const a = extractNewsletter(plan.newsletter);
-      const ins = await client.query(
-        `insert into articles (user_id, source_type, inbound_email_id, added_via, title, author, site_name,
-           excerpt, content_html, text_content, word_count, reading_minutes, status)
-         values ($1, 'email', $2, 'email', $3, $4, $5, $6, $7, $8, $9, $10, 'ready')
-         on conflict do nothing`,
-        [row.user_id, inboundEmailId, a.title, a.author, a.siteName, a.excerpt, a.contentHtml,
-         a.textContent, a.wordCount, a.readingMinutes],
+      duplicate = await findDuplicateNewsletter(
+        client, row.user_id, { messageId: email.messageId ?? null, title: plan.newsletter.title }, 'email',
       );
-      newsletterSaved = (ins.rowCount ?? 0) > 0;
+      if (!duplicate) {
+        const a = extractNewsletter(plan.newsletter);
+        const ins = await client.query(
+          `insert into articles (user_id, source_type, inbound_email_id, added_via, title, author, site_name,
+             excerpt, content_html, text_content, word_count, reading_minutes, status)
+           values ($1, 'email', $2, 'email', $3, $4, $5, $6, $7, $8, $9, $10, 'ready')
+           on conflict do nothing`,
+          [row.user_id, inboundEmailId, a.title, a.author, a.siteName, a.excerpt, a.contentHtml,
+           a.textContent, a.wordCount, a.readingMinutes],
+        );
+        newsletterSaved = (ins.rowCount ?? 0) > 0;
+      }
     }
 
     await client.query(
       `update inbound_emails set status = 'processed', result = $2, error = null where id = $1`,
-      [inboundEmailId, { reason: plan.reason, urls: plan.urls, linksAdded, newsletterSaved }],
+      [inboundEmailId, { reason: plan.reason, urls: plan.urls, linksAdded, newsletterSaved, duplicate }],
     );
     await client.query('commit');
   } catch (err) {
