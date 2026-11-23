@@ -1,70 +1,77 @@
-// Regenerates assets/IconTemplate.png (22x22) and IconTemplate@2x.png (44x44): a black sheet-of-paper glyph on
-// transparent, which macOS tints as a template image. Run: node apps/mac/scripts/make-icons.js
+// Regenerates every Mac app icon from the Paperbrew logo geometry (apps/web/src/Logo.tsx, public/favicon.svg):
+//   assets/icon.icns            Dock/Finder icon: cream mark on a near-black macOS rounded square with a soft shadow
+//   assets/IconTemplate.png     menu-bar tray icon, 22x22, pure black on transparent (macOS tints it)
+//   assets/IconTemplate@2x.png  the same at 44x44
+// Needs macOS (uses `iconutil`) and `sharp`, which is deliberately NOT a dependency of the repo:
+//   npm i --no-save sharp            (from the repo root; or install it elsewhere and set NODE_PATH)
+//   node apps/mac/scripts/make-icons.js
+// Line weights are heavier than the on-screen logo (2.6) so the mark still reads at 16 px and in the menu bar.
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
-const zlib = require('node:zlib');
+const { execFileSync } = require('node:child_process');
+const sharp = require('sharp');
 
-const SS = 8; // supersampling per axis, for smooth edges
-const HALF_STROKE = 0.75;
+const assets = path.join(__dirname, '..', 'assets');
 
-// Shapes in a 22x22 unit square.
-const outline = [[5, 2], [13, 2], [17, 6], [17, 20], [5, 20]];
-const fold = [[13, 2], [13, 6], [17, 6]];
-const lines = [[[8, 10], [14, 10]], [[8, 13], [14, 13]], [[8, 16], [12, 16]]];
-
-function distSeg(px, py, [ax, ay], [bx, by]) {
-  const dx = bx - ax, dy = by - ay;
-  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)));
-  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+// The mark on its 64-unit grid. Keep in sync with Logo.tsx. `detail: false` drops the cup rail and gauge, which would clog at tray size.
+function mark({ stroke, pour, detail = true }) {
+  return `<g fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round">
+    ${detail ? '<path d="M20 4h24"/>' : ''}
+    <rect x="16" y="8" width="32" height="46" rx="4"/>
+    ${detail ? '<circle cx="32" cy="15" r="3.5"/>' : ''}
+    <path d="M25 22h14v3a3 3 0 0 1-3 3h-8a3 3 0 0 1-3-3z"/>
+    <path d="M39 24.5h14"/>
+    <path d="M29.5 28h5l-1 3h-3z"/>
+    <path stroke-width="${pour}" d="M32 31.5v8.5"/>
+    <path d="M23 41h18a9 10.4 0 0 1-18 0z"/>
+    <path d="M12 54h40v5H12z"/>
+  </g>`;
 }
-const nearPath = (px, py, pts, closed) => {
-  let d = Infinity;
-  for (let i = 0; i < pts.length - (closed ? 0 : 1); i++) d = Math.min(d, distSeg(px, py, pts[i], pts[(i + 1) % pts.length]));
-  return d <= HALF_STROKE;
-};
-const covered = (x, y) =>
-  nearPath(x, y, outline, true) || nearPath(x, y, fold, false) || lines.some((l) => nearPath(x, y, l, false));
+// The mark's bounding box is 40 wide x 55 tall (51 without the rail), centred on x 32 and y `midY`.
+const place = (cx, cy, height, units = 55, midY = 31.5) => `translate(${cx} ${cy}) scale(${height / units}) translate(-32 ${-midY})`;
 
-function crc32(buf) {
-  let c, crc = ~0;
-  for (let i = 0; i < buf.length; i++) {
-    c = (crc ^ buf[i]) & 0xff;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    crc = (crc >>> 8) ^ c;
+// Heavier strokes at small sizes, where a hairline would vanish.
+function weights(px) {
+  if (px <= 32) return { stroke: 4.8, pour: 6.2 };
+  if (px <= 64) return { stroke: 4.2, pour: 5.4 };
+  if (px <= 256) return { stroke: 3.6, pour: 4.8 };
+  return { stroke: 3.2, pour: 4.4 };
+}
+
+// 1024 design: Apple's template body (824 square, radius 185, centred) plus its drop shadow; the mark is ~64% of the body.
+function appIconSvg(px) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 1024 1024">
+  <defs><filter id="s" x="-10%" y="-10%" width="120%" height="125%">
+    <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.35"/></filter></defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#111" filter="url(#s)"/>
+  <g color="#F7F3EA" transform="${place(512, 512, 527)}">${mark(weights(px))}</g>
+</svg>`;
+}
+
+// Tray template: ~18 px of glyph height in a 22 px canvas, pure black.
+function trayIconSvg(px) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 22 22">
+  <g color="#000" transform="${place(11, 11, 18, 51, 33.5)}">${mark({ stroke: 3.8, pour: 5, detail: false })}</g>
+</svg>`;
+}
+
+const render = (svg, file) => sharp(Buffer.from(svg), { density: 72 }).png().toFile(file);
+
+async function main() {
+  await render(trayIconSvg(22), path.join(assets, 'IconTemplate.png'));
+  await render(trayIconSvg(44), path.join(assets, 'IconTemplate@2x.png'));
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'paperbrew-icon-'));
+  const iconset = path.join(dir, 'icon.iconset');
+  fs.mkdirSync(iconset);
+  const entries = [[16, 1], [16, 2], [32, 1], [32, 2], [128, 1], [128, 2], [256, 1], [256, 2], [512, 1], [512, 2]];
+  for (const [base, scale] of entries) {
+    const px = base * scale;
+    await render(appIconSvg(px), path.join(iconset, `icon_${base}x${base}${scale === 2 ? '@2x' : ''}.png`));
   }
-  return ~crc >>> 0;
+  execFileSync('iconutil', ['-c', 'icns', iconset, '-o', path.join(assets, 'icon.icns')]);
+  fs.rmSync(dir, { recursive: true, force: true });
+  console.log('wrote icon.icns, IconTemplate.png, IconTemplate@2x.png');
 }
-function chunk(type, data) {
-  const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
-  const td = Buffer.concat([Buffer.from(type), data]);
-  const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(td));
-  return Buffer.concat([len, td, crc]);
-}
-function png(size) {
-  const scale = size / 22;
-  const raw = Buffer.alloc((size * 4 + 1) * size);
-  for (let y = 0; y < size; y++) {
-    raw[y * (size * 4 + 1)] = 0;
-    for (let x = 0; x < size; x++) {
-      let hit = 0;
-      for (let sy = 0; sy < SS; sy++) for (let sx = 0; sx < SS; sx++) {
-        if (covered((x + (sx + 0.5) / SS) / scale, (y + (sy + 0.5) / SS) / scale)) hit++;
-      }
-      const o = y * (size * 4 + 1) + 1 + x * 4;
-      raw[o] = raw[o + 1] = raw[o + 2] = 0;
-      raw[o + 3] = Math.round((255 * hit) / (SS * SS));
-    }
-  }
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8; ihdr[9] = 6; // 8-bit RGBA
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0)),
-  ]);
-}
-
-const out = path.join(__dirname, '..', 'assets');
-fs.mkdirSync(out, { recursive: true });
-fs.writeFileSync(path.join(out, 'IconTemplate.png'), png(22));
-fs.writeFileSync(path.join(out, 'IconTemplate@2x.png'), png(44));
+main().catch((e) => { console.error(e); process.exit(1); });
