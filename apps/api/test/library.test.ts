@@ -14,10 +14,12 @@ vi.mock('../src/config.js', () => ({
     FETCH_TIMEOUT_MS: 1000,
     FETCH_MAX_BYTES: 1000,
     PORT: 8787,
+    AUTOBREW_ENABLED: false,
   },
 }));
 
 const { app } = await import('../src/app.js');
+const { config } = await import('../src/config.js');
 const { auth } = await import('../src/auth/auth.js');
 const { pool } = await import('../src/db/client.js');
 const { gmailAvailable } = await import('../src/gmail/available.js');
@@ -141,6 +143,20 @@ describe('paper layout setting', () => {
       expect((await on.json()).gmailAvailable).toBe(true);
     } finally {
       process.env = original;
+    }
+  });
+
+  it('GET /me returns scheduleAvailable from AUTOBREW_ENABLED', async () => {
+    signedIn();
+    const off = await app.request('/me', { headers: { cookie: 'better-auth.session_token=x' } });
+    expect((await off.json()).scheduleAvailable).toBe(false);
+
+    (config as { AUTOBREW_ENABLED: boolean }).AUTOBREW_ENABLED = true;
+    try {
+      const on = await app.request('/me', { headers: { cookie: 'better-auth.session_token=x' } });
+      expect((await on.json()).scheduleAvailable).toBe(true);
+    } finally {
+      (config as { AUTOBREW_ENABLED: boolean }).AUTOBREW_ENABLED = false;
     }
   });
 

@@ -1,4 +1,5 @@
 import type pg from 'pg';
+import { config } from '../config.js';
 import { pool } from '../db/client.js';
 import { enqueue } from '../jobs/queue.js';
 import { isBrewDue } from '../schedule/schedule.js';
@@ -22,6 +23,9 @@ export async function tick(
          where j.type = 'gmail_sync' and j.done_at is null and j.payload->>'id' = c.user_id::text
        )`,
   );
+
+  // Scheduled issues stay off until the print agent exists (AUTOBREW_ENABLED), so nothing piles up queued.
+  if (!config.AUTOBREW_ENABLED) return { gmail: rowCount ?? 0, brews: 0 };
 
   // One create_issue per enabled user whose slot is open, unless one is already waiting or running.
   // Whether the slot is open is decided here in JS; createIssue re-checks it under a row lock.

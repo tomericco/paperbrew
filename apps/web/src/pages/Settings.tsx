@@ -6,7 +6,7 @@ import type { PaperLayout } from './layouts';
 import { GmailSection } from './settings/GmailSection';
 import { ScheduleSection } from './settings/ScheduleSection';
 
-type Me = { paperLayout: PaperLayout; gmailAvailable: boolean };
+type Me = { paperLayout: PaperLayout; gmailAvailable: boolean; scheduleAvailable: boolean };
 
 const NOTICES: Record<string, string> = {
   connected: 'Gmail connected. New newsletters will appear within the hour.',
@@ -91,7 +91,7 @@ function SettingsContent({ name }: { name: string }) {
           ) : (
             <>
               <PaperSection initial={me.paperLayout} />
-              <ScheduleSection />
+              {me.scheduleAvailable && <ScheduleSection />}
               {me.gmailAvailable && <GmailSection />}
             </>
           )}

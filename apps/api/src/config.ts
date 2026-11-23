@@ -34,6 +34,11 @@ const Env = z.object({
     .optional()
     .transform((v) => v || undefined)
     .refine((v) => v === undefined || Buffer.from(v, 'base64').length === 32, 'GMAIL_TOKEN_KEY must be base64 of exactly 32 bytes'),
+  // The hourly tick queues scheduled issues only when this is "true". Off until the print agent ships.
+  AUTOBREW_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   // Required for GET /cron/run-jobs; without it the endpoint always answers 401.
   CRON_SECRET: z
     .string()

@@ -82,6 +82,7 @@ The API runs as one Vercel Node.js function (`api/index.ts`); `vercel.json` rout
 - `INBOUND_ADDRESS`
 - `INBOUND_WEBHOOK_USER`, `INBOUND_WEBHOOK_PASSWORD`
 - `CRON_SECRET` (Vercel sends it to the cron as a bearer token; without it the endpoint answers 401)
+- `AUTOBREW_ENABLED` (optional, off by default until the print agent ships; set to `true` to test scheduled issues)
 - `BETTER_AUTH_SECRET` (32+ chars) and `BETTER_AUTH_URL` (the **web** origin, e.g. `https://paperbrew-web.vercel.app`)
 - Sign-in providers, each enabled only when both are set: `GOOGLE_CLIENT_ID`/`_SECRET`, `GITHUB_CLIENT_ID`/`_SECRET`, `REDDIT_CLIENT_ID`/`_SECRET`. Callback URLs are `$BETTER_AUTH_URL/api/auth/callback/{google|github|reddit}`.
 

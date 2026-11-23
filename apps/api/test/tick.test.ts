@@ -13,6 +13,7 @@ const cfg = vi.hoisted(() => ({
   FETCH_MAX_BYTES: 1000,
   PORT: 8787,
   CRON_SECRET: 'cron-secret-cron-secret' as string | undefined,
+  AUTOBREW_ENABLED: true,
 }));
 vi.mock('../src/config.js', () => ({ config: cfg }));
 // No job may actually run.
@@ -27,6 +28,7 @@ const BEARER = { authorization: 'Bearer cron-secret-cron-secret' };
 
 beforeEach(() => {
   cfg.CRON_SECRET = 'cron-secret-cron-secret';
+  cfg.AUTOBREW_ENABLED = true;
   vi.mocked(drain).mockReset();
 });
 afterEach(() => vi.restoreAllMocks());
@@ -80,6 +82,17 @@ describe('GET /cron/tick', () => {
     expect(sql).toContain('not exists');
     expect(drain).toHaveBeenCalledTimes(1);
     expect(order).toEqual(['enqueue', 'enqueue', 'drain']);
+  });
+});
+
+describe('tick() with AUTOBREW_ENABLED off', () => {
+  it('skips the brew step: no users query, brews 0, gmail still queued', async () => {
+    cfg.AUTOBREW_ENABLED = false;
+    const query = vi.fn(async () => ({ rowCount: 2, rows: [] }));
+    expect(await tick({ query } as never, new Date('2026-11-23T08:30:00Z'))).toEqual({ gmail: 2, brews: 0 });
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(String(query.mock.calls[0][0])).toContain('gmail_sync');
+    expect(query.mock.calls.some((c) => /from users/.test(String(c[0])))).toBe(false);
   });
 });
 
