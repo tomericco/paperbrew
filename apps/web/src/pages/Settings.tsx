@@ -4,6 +4,7 @@ import { Layout } from '../Layout';
 import { errorText, LAYOUTS } from './layouts';
 import type { PaperLayout } from './layouts';
 import { GmailSection } from './settings/GmailSection';
+import { ScheduleSection } from './settings/ScheduleSection';
 
 type Me = { paperLayout: PaperLayout; gmailAvailable: boolean };
 
@@ -90,6 +91,7 @@ function SettingsContent({ name }: { name: string }) {
           ) : (
             <>
               <PaperSection initial={me.paperLayout} />
+              <ScheduleSection />
               {me.gmailAvailable && <GmailSection />}
             </>
           )}

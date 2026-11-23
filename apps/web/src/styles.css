@@ -847,6 +847,88 @@ button:disabled {
   color: #6b6b6b;
 }
 
+.schedule-controls {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field-label {
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b6b6b;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: 16px;
+}
+
+.field select {
+  width: 100%;
+  min-height: 40px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 16px;
+  color: #111;
+  background: #fff;
+  border: 1px solid #111;
+  border-radius: 4px;
+}
+
+.field select:focus-visible {
+  outline: 2px solid #111;
+  outline-offset: 2px;
+}
+
+.field select:disabled {
+  opacity: 0.4;
+}
+
+.day-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.day-chip {
+  min-width: 52px;
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 15px;
+}
+
+.day-chip[aria-pressed='true'] {
+  background: #111;
+  color: #fff;
+}
+
+@media (hover: hover) {
+  /* Keep the hover fill from looking like a pressed chip. */
+  .day-chip[aria-pressed='false']:hover:not(:disabled) {
+    background: #f0f0f0;
+    color: #111;
+  }
+}
+
+.settings-section .schedule-next {
+  margin: 0;
+  font-weight: 600;
+}
+
 .gmail-account {
   display: flex;
   align-items: center;
