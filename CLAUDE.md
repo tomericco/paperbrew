@@ -19,6 +19,7 @@ Paperbrew turns the articles people save from Hacker News, blogs and newsletters
 npm workspaces monorepo. Run scripts from the root, or target one workspace with `-w @paperbrew/<name>`.
 - `apps/api` (`@paperbrew/api`): backend, email capture. Paths in the next section are relative to it.
 - `apps/web` (`@paperbrew/web`): frontend (website + web app). Vite + React + TypeScript. In dev, `/api/*` is proxied to the API on :8787 with the prefix stripped.
+- `apps/mac` (`@paperbrew/mac`): Electron menu-bar app that prints queued issues (pairs with a device token, polls the API, runs `lp`). TypeScript CommonJS, tsc to `dist/`.
 - `packages/*`: shared code (e.g. API types) once both apps need it. Don't import across `apps/` directly.
 - Shared compiler options live in `tsconfig.base.json`; each workspace extends it.
 
@@ -36,6 +37,8 @@ All from the repo root:
 - `npm run db:migrate`: apply `apps/api/src/db/schema.sql` (idempotent)
 - `npm run dev` / `npm run worker`: API and worker
 - `npm run dev:web`: web app on :5173
+- `npm run dev:mac`: build and start the Mac app (downloads Electron on first run). Root `npm run build` also compiles it.
+- `npm run dist:mac`: universal `.dmg` in `apps/mac/release/`. Needs `PAPERBREW_API_URL=https://<real web origin>` at build time (it is baked into the app); unsigned unless `CSC_NAME` is set. See `apps/mac/README.md`.
 - `.env` lives in `apps/api/` (copy `apps/api/.env.example`)
 
 ## Conventions
@@ -60,7 +63,8 @@ All from the repo root:
 - Pairing: Settings calls `POST /me/print-devices/pair-code` (one-time, 10 minutes) and opens `paperbrew://pair?code=…&api=<BETTER_AUTH_URL>`; the Mac exchanges the code at `POST /agent/pair` for a bearer token. One Mac per user (pairing revokes the others). `api` is the web origin, so the agent calls `<api>/api/agent/...`.
 - `/agent/*` routes use `Authorization: Bearer <token>` (401 = revoked): `POST /agent/jobs/claim`, `GET /agent/issues/:id/pdf`, `POST /agent/issues/:id/result`. Contract in `apps/api/README.md`.
 - Issue states: `queued` → `printing` → `printed` | `failed`. The stale sweep in `/cron/tick` fails an issue stuck `printing` for 30 minutes (`timed out`); a late success report still counts.
-- `MAC_APP_URL` is the Mac app download link; Settings shows the Printer section only when it is set.
+- `MAC_APP_URL` (API env) is the Mac app download link; Settings shows the Printer section only when it is set. The hosted `.dmg` must be built with the real web origin in `PAPERBREW_API_URL`.
+- The Mac app (`apps/mac`) polls every 60 s, pairs via the `paperbrew://` link or **Paste code…**, and is one Mac per user.
 
 ## Open decisions
 - Inbound provider: CloudMailin (decided 2026-11-01: free, no domain needed; addresses are `<id>+{token}@cloudmailin.net`). Adapter in `src/inbound/cloudmailin.ts`; the Postmark adapter (`src/inbound/postmark.ts`) is kept as the alternative. Both feed one shared handler in `src/app.ts`.
@@ -75,4 +79,4 @@ All from the repo root:
 5. Magazine model plus print/PDF rendering. `GET /brew` already renders all saved articles to a PDF, flat or as an imposed A4 booklet (done); the magazine model (reorder, rename, looks, optional pages) is still to do.
 6. ~~Gmail newsletters~~ done: opt-in sync into the library (hourly tick queues `gmail_sync`).
 7. ~~Brewing schedule (PR 2)~~ done: per-user days, hour, time zone and reading-time budget; the hourly tick queues `create_issue`, which stores a queued `issues` row. It is gated by `AUTOBREW_ENABLED` (default off, which also hides the Schedule settings) until printing exists.
-8. ~~Print API and pairing~~ done (PR 3). Next: the Mac app (local agent) that claims queued issues and prints them.
+8. ~~Print API and pairing~~ done (PR 3). ~~Mac app~~ built (PR 4). Remaining: Apple signing and notarization before giving it to non-technical users; hosting the `.dmg` and setting `MAC_APP_URL`. Follow-ups: the pairing dialog should show which account a code belongs to (needs a server code-preview endpoint: a link can carry an attacker's own code with the real host); show a 'printing' state; `createIssue` should check for a paired device before scheduling brews.
