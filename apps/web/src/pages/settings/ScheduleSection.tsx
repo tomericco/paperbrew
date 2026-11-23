@@ -161,7 +161,7 @@ export function ScheduleSection() {
   else {
     const next = schedule.enabled && schedule.nextBrewAt ? `Next issue: ${formatNext(schedule.nextBrewAt, schedule.timezone)}` : 'No issue scheduled';
     body = (
-      <fieldset className="schedule-controls" disabled={saving}>
+      <div className="schedule-controls" aria-busy={saving}>
         <label className="choice">
           <input type="checkbox" role="switch" checked={schedule.enabled} onChange={(e) => void save({ brewEnabled: e.target.checked })} />
           <span className="choice-text">
@@ -244,7 +244,7 @@ export function ScheduleSection() {
             {error}
           </p>
         )}
-      </fieldset>
+      </div>
     );
   }
 

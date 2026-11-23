@@ -894,10 +894,6 @@ button:disabled {
   outline-offset: 2px;
 }
 
-.field select:disabled {
-  opacity: 0.4;
-}
-
 .day-chips {
   display: flex;
   flex-wrap: wrap;
