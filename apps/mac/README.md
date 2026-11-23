@@ -55,7 +55,7 @@ add notarization.
 
 `npm run dev:mac` builds and starts the app. The first run downloads Electron (it is not installed with
 `npm install`). In dev, macOS only registers the `paperbrew://` scheme for the packaged app, so a Connect this Mac
-link only reaches an app that is already running; use **Paste code…** in the menu instead.
+link will not open the dev app; use **Paste code…** in the menu instead.
 
 ## Offering the download in Paperbrew
 
