@@ -1,6 +1,10 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { pool } from '../db/client.js';
+import { BusyError } from '../brew/lifecycle.js';
+import { renderIssuePdf } from '../brew/issuePdf.js';
+import type { PaperLayout } from '../brew/layout.js';
+import type { BrewArticle } from '../brew/render.js';
 import { requireDevice, type DeviceEnv } from './devices.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -80,4 +84,75 @@ agent.post('/agent/issues/:id/result', requireDevice, async (c) => {
     if (rollbackFailed) client.release(true);
     else client.release();
   }
+});
+
+// The Mac fetches the issue it claimed as a PDF. The articles are re-read now, so ones archived since
+// the issue was queued are left out; if none remain the issue is marked printed and the answer is 204.
+// A busy browser is a 503 with Retry-After and the issue stays `printing`, so the same device retries.
+agent.get('/agent/issues/:id/pdf', requireDevice, async (c) => {
+  const id = c.req.param('id');
+  if (!UUID_RE.test(id)) return c.json({ error: 'not found' }, 404);
+  const deviceId = c.get('deviceId');
+  const userId = c.get('userId');
+
+  const { rows: issues } = await pool.query<{ layout: PaperLayout; article_ids: string[] }>(
+    `select layout, article_ids from issues
+     where id = $1 and status = 'printing' and claimed_by = $2 and user_id = $3`,
+    [id, deviceId, userId],
+  );
+  const issue = issues[0];
+  if (!issue) return c.json({ error: 'not found' }, 404);
+
+  const { rows } = await pool.query<{
+    id: string;
+    title: string | null;
+    author: string | null;
+    site_name: string | null;
+    source_url: string | null;
+    reading_minutes: number | null;
+    content_html: string | null;
+  }>(
+    `select id, title, author, site_name, source_url, reading_minutes, content_html
+     from articles
+     where id = any($1) and user_id = $2 and status = 'ready' and archived_at is null
+     order by array_position($1::uuid[], id)`,
+    [issue.article_ids, userId],
+  );
+
+  if (rows.length === 0) {
+    await pool.query(
+      `update issues set status = 'printed', printed_at = now()
+       where id = $1 and status = 'printing' and claimed_by = $2`,
+      [id, deviceId],
+    );
+    return c.body(null, 204);
+  }
+
+  const articles: BrewArticle[] = rows.map((r) => ({
+    title: r.title,
+    author: r.author,
+    siteName: r.site_name,
+    sourceUrl: r.source_url,
+    readingMinutes: r.reading_minutes,
+    contentHtml: r.content_html,
+  }));
+
+  const date = new Date();
+  let pdf: ReadableStream<Uint8Array>;
+  try {
+    pdf = await renderIssuePdf(articles, issue.layout, date);
+  } catch (err) {
+    if (err instanceof BusyError) {
+      return c.json({ error: 'Another magazine is brewing. Try again in a minute.' }, 503, { 'retry-after': '30' });
+    }
+    console.error('[print] render failed', err);
+    return c.json({ error: "Couldn't render the issue." }, 500);
+  }
+
+  const day = date.toISOString().slice(0, 10); // UTC
+  return c.body(pdf, 200, {
+    'content-type': 'application/pdf',
+    'content-disposition': `attachment; filename="paperbrew-${day}${issue.layout === 'booklet' ? '-booklet' : ''}.pdf"`,
+    'cache-control': 'private, no-store',
+  });
 });
