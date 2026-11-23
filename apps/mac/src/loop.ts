@@ -17,6 +17,10 @@ export type RunResult = {
   pending: Pending;
   error?: string;
   printerMissing?: boolean;
+  /** The issue a 'failed' result is about, when one was claimed (lets callers tell two failures apart). */
+  issueId?: string;
+  /** 'printed' because the server said there was nothing left to print: nothing went to the printer. */
+  nothingToPrint?: true;
 };
 
 const message = (err: unknown): string => (err instanceof Error ? err.message : String(err));
@@ -56,7 +60,7 @@ export async function runOnce(deps: LoopDeps, pending: Pending): Promise<RunResu
     return mapPhaseError(err, job);
   }
   // Nothing left to print: the server already marked the issue printed, so we must not report.
-  if (bytes === null) return { outcome: 'printed', pending: null };
+  if (bytes === null) return { outcome: 'printed', pending: null, nothingToPrint: true };
 
   let file: string | null = null;
   let printError: string | null = null;
@@ -77,7 +81,7 @@ export async function runOnce(deps: LoopDeps, pending: Pending): Promise<RunResu
     if (err instanceof UnauthorizedError) return { outcome: 'unauthorized', pending: null };
     // Offline or Gone or anything else: fall through to 'failed' (see the doc comment).
   }
-  const result: RunResult = { outcome: 'failed', pending: null, error: printError };
+  const result: RunResult = { outcome: 'failed', pending: null, error: printError, issueId: job.id };
   if (/does not exist/i.test(printError)) result.printerMissing = true;
   return result;
 }
@@ -90,7 +94,7 @@ async function reportPrinted(api: Api, job: NonNullable<Pending>): Promise<RunRe
     if (err instanceof OfflineError) return { outcome: 'offline', pending: { id: job.id, layout: job.layout, printed: true } };
     if (err instanceof GoneError) return { outcome: 'idle', pending: null };
     if (err instanceof UnauthorizedError) return { outcome: 'unauthorized', pending: null };
-    return { outcome: 'failed', pending: null, error: message(err) };
+    return { outcome: 'failed', pending: null, error: message(err), issueId: job.id };
   }
 }
 
@@ -99,5 +103,7 @@ function mapPhaseError(err: unknown, job: Pending): RunResult {
   if (err instanceof UnauthorizedError) return { outcome: 'unauthorized', pending: null };
   if (err instanceof GoneError) return { outcome: 'idle', pending: null };
   if (err instanceof OfflineError) return { outcome: 'offline', pending: job };
-  return { outcome: 'failed', pending: null, error: message(err) };
+  const failed: RunResult = { outcome: 'failed', pending: null, error: message(err) };
+  if (job) failed.issueId = job.id;
+  return failed;
 }

@@ -54,8 +54,12 @@ export function deviceName(hostname: string): string {
   return name || 'Mac';
 }
 
-/** Whether pairing with this origin needs the user's confirmation first (everything except localhost). */
-export function needsPairConfirmation(api: string): boolean {
+/**
+ * Whether pairing from a link with this origin needs the user's confirmation first: everything except localhost,
+ * and localhost too in a packaged app (only an unpackaged dev run skips the dialog).
+ */
+export function needsPairConfirmation(api: string, isPackaged: boolean): boolean {
+  if (isPackaged) return true;
   try {
     return new URL(api).hostname !== 'localhost';
   } catch {
@@ -85,4 +89,21 @@ const NOTIFY_ERROR_MAX = 200;
 export function truncateError(message: string): string {
   const flat = message.replace(/\s+/g, ' ').trim();
   return flat.length > NOTIFY_ERROR_MAX ? `${flat.slice(0, NOTIFY_ERROR_MAX - 1)}…` : flat;
+}
+
+/** The build's default origin, from `dist/defaults.json`. Null when missing or not a safe origin. */
+export function parseDefaults(raw: unknown): { api: string | null } {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  return { api: safeApiOrigin(r.api) };
+}
+
+/** Notification de-dup key: the same error on the same issue is told once; a different issue is told again. */
+export function failureKey(issueId: string | undefined, message: string): string {
+  return `${issueId ?? ''}\u0000${message}`;
+}
+
+/** Text under the pairing confirmation dialog's title. */
+export function confirmDetail(alreadyConnected: boolean): string {
+  const base = 'Only continue if you clicked Connect this Mac on your Paperbrew settings page.';
+  return alreadyConnected ? `${base} This replaces your current connection.` : base;
 }

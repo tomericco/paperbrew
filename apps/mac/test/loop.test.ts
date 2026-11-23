@@ -57,7 +57,7 @@ describe('runOnce', () => {
   it('download null -> printed, no print, no report', async () => {
     const { deps, api, print } = makeDeps({ api: { downloadPdf: vi.fn(async () => null) } });
     const r = await runOnce(deps, null);
-    expect(r).toEqual({ outcome: 'printed', pending: null });
+    expect(r).toEqual({ outcome: 'printed', pending: null, nothingToPrint: true });
     expect(print).not.toHaveBeenCalled();
     expect(api.report).not.toHaveBeenCalled();
   });
@@ -66,7 +66,7 @@ describe('runOnce', () => {
     const msg = 'lp: The printer or class does not exist.';
     const { deps, api } = makeDeps({ print: vi.fn(async () => { throw new Error(msg); }) });
     const r = await runOnce(deps, null);
-    expect(r).toEqual({ outcome: 'failed', pending: null, error: msg, printerMissing: true });
+    expect(r).toEqual({ outcome: 'failed', pending: null, error: msg, printerMissing: true, issueId: 'i1' });
     expect(api.report).toHaveBeenCalledWith('i1', { ok: false, error: msg });
   });
 
@@ -112,7 +112,7 @@ describe('runOnce', () => {
   it('unexpected download error -> failed, no report, pending dropped', async () => {
     const { deps, api } = makeDeps({ api: { downloadPdf: vi.fn(async () => { throw new Error('unexpected status 400'); }) } });
     const r = await runOnce(deps, null);
-    expect(r).toEqual({ outcome: 'failed', pending: null, error: 'unexpected status 400' });
+    expect(r).toEqual({ outcome: 'failed', pending: null, error: 'unexpected status 400', issueId: 'i1' });
     expect(api.report).not.toHaveBeenCalled();
   });
 
@@ -167,7 +167,7 @@ describe('runOnce', () => {
       print: vi.fn(async () => { throw new Error('lp: paper jam'); }),
       api: { report: vi.fn(async () => { throw new OfflineError('x'); }) },
     });
-    expect(await runOnce(deps, null)).toEqual({ outcome: 'failed', pending: null, error: 'lp: paper jam' });
+    expect(await runOnce(deps, null)).toEqual({ outcome: 'failed', pending: null, error: 'lp: paper jam', issueId: 'i1' });
   });
 
   it('report ok:false unauthorized -> unauthorized', async () => {
@@ -181,7 +181,7 @@ describe('runOnce', () => {
   it('a writeTemp failure is reported as a print failure', async () => {
     const { deps, api, print } = makeDeps({ writeTemp: vi.fn(async () => { throw new Error('ENOSPC'); }) });
     const r = await runOnce(deps, null);
-    expect(r).toEqual({ outcome: 'failed', pending: null, error: 'ENOSPC' });
+    expect(r).toEqual({ outcome: 'failed', pending: null, error: 'ENOSPC', issueId: 'i1' });
     expect(print).not.toHaveBeenCalled();
     expect(api.report).toHaveBeenCalledWith('i1', { ok: false, error: 'ENOSPC' });
   });

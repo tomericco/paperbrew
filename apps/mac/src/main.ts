@@ -1,18 +1,22 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, powerMonitor, shell, Tray } from 'electron';
 import type { MenuItemConstructorOptions } from 'electron';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createApi, OfflineError } from './api';
 import { normalizeCode, parsePairLink } from './deepLink';
 import { runOnce, type RunResult } from './loop';
-import { createPoller } from './poller';
+import { createPoller, createTickLoop } from './poller';
 import { parsePrinters } from './printers';
 import {
+  confirmDetail,
   deviceName,
+  failureKey,
   formatLastPrinted,
   hostLabel,
   needsPairConfirmation,
+  parseDefaults,
   settingsUrl,
   truncateError,
 } from './settings';
@@ -23,6 +27,7 @@ import { lpstat, print, removeTemp, writeTemp } from './system';
 const POLL_MS = 60_000;
 const PROTOCOL = 'paperbrew';
 const PASTE_HTML = path.join(__dirname, 'paste.html');
+const SMOKE_TEST = !app.isPackaged && !!process.env.PAPERBREW_SMOKE_TEST;
 const NEED_PAIR_FIRST = 'Click Connect this Mac in Paperbrew settings first';
 
 type Health = { kind: 'ok' } | { kind: 'offline' } | { kind: 'error'; message: string };
@@ -36,13 +41,22 @@ let health: Health = { kind: 'ok' };
 let defaultPrinterName: string | null = null;
 let menuSeq = 0;
 let lastErrorNotified: string | null = null;
+let pollTimer: NodeJS.Timeout | null = null;
 
-// Everything a tick needs, captured just before it starts (ticks never overlap).
-let tickCtx: { base: string; token: string; printer: string | null } | null = null;
+/** The origin baked in at build time (dist/defaults.json), used by Paste code… on a fresh install. */
+const defaults = (() => {
+  try {
+    return parseDefaults(JSON.parse(fs.readFileSync(path.join(__dirname, 'defaults.json'), 'utf8')));
+  } catch {
+    return { api: null };
+  }
+})();
 
-const poller = createPoller({
-  run: (pending) => {
-    const ctx = tickCtx!;
+// Everything a tick needs, captured just before it starts.
+type TickCtx = { base: string; token: string; printer: string | null };
+
+const poller = createPoller<TickCtx>({
+  run: (pending, ctx) => {
     return runOnce(
       { api: createApi(ctx.base, ctx.token), print, writeTemp, removeTemp, printer: ctx.printer },
       pending,
@@ -130,6 +144,7 @@ function choosePrinter(name: string | null): void {
 }
 
 function disconnect(): void {
+  stopPolling();
   clearToken();
   poller.reset();
   health = { kind: 'ok' };
@@ -138,21 +153,34 @@ function disconnect(): void {
 
 // ---- polling -------------------------------------------------------------------------------
 
-async function tick(): Promise<void> {
-  if (poller.busy) return;
+async function tickOnce(): Promise<void> {
   const token = loadToken();
   const settings = loadSettings();
   if (!token || !settings.api) return;
-  tickCtx = { base: `${settings.api}/api`, token, printer: settings.printer };
-  const result = await poller.tick();
+  // A result from a tick that started before a pair / disconnect / revoke is discarded inside the poller (null).
+  const result = await poller.tick({ base: `${settings.api}/api`, token, printer: settings.printer });
   if (result) handleResult(result);
   await refreshMenu();
+}
+
+const tickLoop = createTickLoop(tickOnce);
+/** `force`: run again right after a tick that is in flight (used right after pairing). */
+const tick = (force = false): Promise<void> => tickLoop(force);
+
+function startPolling(): void {
+  if (!pollTimer) pollTimer = setInterval(() => void tick(), POLL_MS);
+}
+
+function stopPolling(): void {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
 }
 
 function handleResult(r: RunResult): void {
   if (r.outcome !== 'failed') lastErrorNotified = null;
   switch (r.outcome) {
     case 'unauthorized':
+      stopPolling();
       clearToken();
       poller.reset();
       health = { kind: 'ok' };
@@ -165,16 +193,20 @@ function handleResult(r: RunResult): void {
       break;
     case 'printed':
       health = { kind: 'ok' };
-      saveSettings({ lastPrintedAt: new Date().toISOString() });
-      notify('Your issue is printing');
+      // nothingToPrint: the server had nothing left to print, so nothing went to the printer.
+      if (!r.nothingToPrint) {
+        saveSettings({ lastPrintedAt: new Date().toISOString() });
+        notify('Your issue is printing');
+      }
       break;
     case 'failed': {
       const message = truncateError(r.error ?? 'unknown error');
       health = { kind: 'error', message };
       if (r.printerMissing) saveSettings({ printer: null }); // falls back to the default printer next time
       // A persistent error (e.g. a bad server answer) would repeat every minute: tell the user once.
-      if (message !== lastErrorNotified) notify(`Couldn't print your issue: ${message}`);
-      lastErrorNotified = message;
+      const key = failureKey(r.issueId, message);
+      if (key !== lastErrorNotified) notify(`Couldn't print your issue: ${message}`);
+      lastErrorNotified = key;
       break;
     }
   }
@@ -207,7 +239,8 @@ async function pairWith(code: string, api: string): Promise<{ ok: boolean; error
     health = { kind: 'ok' };
     lastErrorNotified = null;
     notify('Connected to Paperbrew');
-    void tick();
+    startPolling();
+    void tick(true); // runs right after any in-flight (now stale) tick finishes
     void refreshMenu();
     return { ok: true };
   } catch (err) {
@@ -219,12 +252,12 @@ async function handlePairLink(link: string): Promise<void> {
   const parsed = parsePairLink(link);
   if (!parsed) return;
   await withPairing(undefined, async () => {
-    if (needsPairConfirmation(parsed.api)) {
+    if (needsPairConfirmation(parsed.api, app.isPackaged)) {
       app.focus({ steal: true });
       const { response } = await dialog.showMessageBox({
         type: 'question',
         message: `Connect this Mac to ${hostLabel(parsed.api)}?`,
-        detail: 'Only continue if you clicked Connect this Mac on your Paperbrew settings page.',
+        detail: confirmDetail(isConnected()),
         buttons: ['Connect', 'Cancel'],
         defaultId: 1,
         cancelId: 1,
@@ -279,7 +312,8 @@ function registerPasteIpc(): void {
     if (!fromPasteWindow) return { ok: false, error: 'Not allowed' };
     const code = typeof raw === 'string' ? normalizeCode(raw) : null;
     if (!code) return { ok: false, error: "That code doesn't look right. It has 8 letters and numbers." };
-    const api = loadSettings().api;
+    // No host confirmation here: both origins are trusted (a saved, already-confirmed pairing, or the build's own constant).
+    const api = loadSettings().api ?? defaults.api;
     if (!api) return { ok: false, error: NEED_PAIR_FIRST };
     const result = await withPairing({ ok: false, error: 'Already connecting…' } as { ok: boolean; error?: string }, () =>
       pairWith(code, api),
@@ -298,7 +332,7 @@ function trayIcon(): Electron.NativeImage {
 }
 
 function registerProtocol(): void {
-  if (process.env.PAPERBREW_SMOKE_TEST) return; // a smoke run must not touch the system's URL handlers
+  if (SMOKE_TEST) return; // a smoke run must not touch the system's URL handlers
   if (process.defaultApp) {
     if (process.argv.length >= 2) app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
   } else {
@@ -328,6 +362,8 @@ if (!app.requestSingleInstanceLock()) {
     });
   });
 
+  app.on('before-quit', stopPolling);
+
   // Closing the paste window must not quit the app.
   app.on('window-all-closed', () => {});
 
@@ -345,10 +381,10 @@ if (!app.requestSingleInstanceLock()) {
 
     for (const url of queuedUrls.splice(0)) void handlePairLink(url);
 
-    setInterval(() => void tick(), POLL_MS);
+    startPolling();
     powerMonitor.on('resume', () => void tick());
     void tick();
 
-    if (process.env.PAPERBREW_SMOKE_TEST) setTimeout(() => app.quit(), 3000);
+    if (SMOKE_TEST) setTimeout(() => app.quit(), 3000);
   });
 }

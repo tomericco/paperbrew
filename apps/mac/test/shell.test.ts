@@ -4,14 +4,17 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { normalizeCode } from '../src/deepLink';
 import type { Pending, RunResult } from '../src/loop';
-import { createPoller, MAX_OFFLINE_TICKS } from '../src/poller';
+import { createPoller, createTickLoop, MAX_OFFLINE_TICKS } from '../src/poller';
 import {
   deviceName,
   formatLastPrinted,
   hostLabel,
   mergeSettings,
+  confirmDetail,
+  failureKey,
   needsPairConfirmation,
   normalizeSettings,
+  parseDefaults,
   safeApiOrigin,
   settingsUrl,
   truncateError,
@@ -28,6 +31,26 @@ describe('normalizeCode', () => {
     expect(normalizeCode('ABCD23456')).toBeNull();
     expect(normalizeCode('ABCD234O')).toBeNull(); // O is not in the alphabet
     expect(normalizeCode('')).toBeNull();
+  });
+});
+
+describe('defaults, failure key, confirm detail', () => {
+  it('parseDefaults accepts only safe origins', () => {
+    expect(parseDefaults({ api: 'https://paperbrew.example/x' })).toEqual({ api: 'https://paperbrew.example' });
+    expect(parseDefaults({ api: 'http://localhost:5173' })).toEqual({ api: 'http://localhost:5173' });
+    expect(parseDefaults({ api: 'http://paperbrew.example' })).toEqual({ api: null });
+    expect(parseDefaults(null)).toEqual({ api: null });
+    expect(parseDefaults('x')).toEqual({ api: null });
+  });
+  it('failureKey separates issues and messages', () => {
+    expect(failureKey('a', 'boom')).toBe(failureKey('a', 'boom'));
+    expect(failureKey('a', 'boom')).not.toBe(failureKey('b', 'boom'));
+    expect(failureKey('a', 'boom')).not.toBe(failureKey('a', 'bang'));
+    expect(failureKey(undefined, 'boom')).not.toBe(failureKey('a', 'boom'));
+  });
+  it('confirmDetail mentions the replacement only when already connected', () => {
+    expect(confirmDetail(false)).not.toMatch(/replaces/);
+    expect(confirmDetail(true)).toMatch(/This replaces your current connection\./);
   });
 });
 
@@ -66,10 +89,12 @@ describe('settings', () => {
     expect(deviceName('')).toBe('Mac');
   });
   it('confirmation is needed for everything except localhost', () => {
-    expect(needsPairConfirmation('http://localhost:5173')).toBe(false);
-    expect(needsPairConfirmation('https://paperbrew.example')).toBe(true);
-    expect(needsPairConfirmation('https://localhost.evil.example')).toBe(true);
-    expect(needsPairConfirmation('http://127.0.0.1:5173')).toBe(true);
+    expect(needsPairConfirmation('http://localhost:5173', false)).toBe(false);
+    expect(needsPairConfirmation('https://paperbrew.example', false)).toBe(true);
+    expect(needsPairConfirmation('https://localhost.evil.example', false)).toBe(true);
+    expect(needsPairConfirmation('http://127.0.0.1:5173', false)).toBe(true);
+    // A packaged app confirms even for localhost.
+    expect(needsPairConfirmation('http://localhost:5173', true)).toBe(true);
     expect(hostLabel('https://paperbrew.example')).toBe('paperbrew.example');
     expect(hostLabel('https://paperbrew.example:8443')).toBe('paperbrew.example:8443');
   });
@@ -95,7 +120,7 @@ describe('createPoller', () => {
     await p.tick();
     expect(p.pending).toEqual({ id: 'a', layout: 'flat' });
     await p.tick();
-    expect(run).toHaveBeenLastCalledWith({ id: 'a', layout: 'flat' });
+    expect(run).toHaveBeenLastCalledWith({ id: 'a', layout: 'flat' }, undefined);
     expect(p.pending).toBeNull();
   });
 
@@ -155,6 +180,97 @@ describe('createPoller', () => {
     const p = createPoller({ run: async () => { throw new Error('boom'); } });
     expect(await p.tick()).toEqual({ outcome: 'failed', pending: null, error: 'boom' });
     expect(p.busy).toBe(false);
+  });
+});
+
+describe('connection generation', () => {
+  function deferred() {
+    let resolve!: (r: RunResult) => void;
+    const promise = new Promise<RunResult>((res) => { resolve = res; });
+    return { promise, resolve };
+  }
+
+  it('discards a tick that finished after reset(): no pending, no offline count, result null', async () => {
+    const d = deferred();
+    const p = createPoller({ run: () => d.promise });
+    const gen = p.generation;
+    const t = p.tick();
+    p.reset();
+    expect(p.generation).toBe(gen + 1);
+    d.resolve(offline({ id: 'old', layout: 'flat' }));
+    expect(await t).toBeNull();
+    expect(p.pending).toBeNull();
+    expect(p.busy).toBe(false);
+  });
+
+  it('a discarded unauthorized result is not returned (so it cannot clear the new token)', async () => {
+    const d = deferred();
+    const p = createPoller({ run: () => d.promise });
+    const t = p.tick();
+    p.reset();
+    d.resolve({ outcome: 'unauthorized', pending: null });
+    expect(await t).toBeNull();
+  });
+
+  it('stays busy until the stale tick finishes, then the next tick works normally', async () => {
+    const d = deferred();
+    const run = vi.fn<(p: Pending) => Promise<RunResult>>()
+      .mockReturnValueOnce(d.promise)
+      .mockResolvedValueOnce({ outcome: 'printed', pending: null });
+    const p = createPoller({ run });
+    const t = p.tick();
+    p.reset();
+    expect(p.busy).toBe(true);
+    expect(await p.tick()).toBeNull(); // old tick still running
+    d.resolve({ outcome: 'idle', pending: null });
+    await t;
+    expect(await p.tick()).toEqual({ outcome: 'printed', pending: null });
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it('passes the tick context through to run', async () => {
+    const run = vi.fn(async (_p: Pending, _c: { n: number }): Promise<RunResult> => ({ outcome: 'idle', pending: null }));
+    const p = createPoller<{ n: number }>({ run });
+    await p.tick({ n: 7 });
+    expect(run).toHaveBeenCalledWith(null, { n: 7 });
+  });
+});
+
+describe('createTickLoop', () => {
+  it('drops a plain request during a running tick', async () => {
+    let release!: () => void;
+    const once = vi.fn(() => new Promise<void>((res) => { release = res; }));
+    const request = createTickLoop(once);
+    const first = request();
+    await request();
+    release();
+    await first;
+    expect(once).toHaveBeenCalledTimes(1);
+  });
+
+  it('a forced request during a running tick runs again right after it', async () => {
+    const releases: Array<() => void> = [];
+    const once = vi.fn(() => new Promise<void>((res) => { releases.push(res); }));
+    const request = createTickLoop(once);
+    const first = request();
+    await request(true);
+    expect(once).toHaveBeenCalledTimes(1);
+    releases[0]();
+    await vi.waitFor(() => expect(once).toHaveBeenCalledTimes(2));
+    releases[1]();
+    await first;
+    expect(once).toHaveBeenCalledTimes(2);
+  });
+
+  it('can run again after finishing, and survives a failing tick', async () => {
+    const once = vi.fn(async () => {});
+    const request = createTickLoop(once);
+    await request();
+    await request();
+    expect(once).toHaveBeenCalledTimes(2);
+    const bad = createTickLoop(async () => { throw new Error('x'); });
+    await expect(bad()).rejects.toThrow('x');
+    await expect(bad()).rejects.toThrow('x'); // not stuck "ticking"
   });
 });
 

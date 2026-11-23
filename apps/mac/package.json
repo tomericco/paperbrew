@@ -6,9 +6,9 @@
   "main": "dist/main.js",
   "description": "Paperbrew menu-bar app that prints queued issues",
   "scripts": {
-    "build": "tsc && cp src/paste.html src/paste.js dist/",
+    "build": "tsc && cp src/paste.html src/paste.js dist/ && node scripts/write-defaults.js",
     "start": "npm run build && electron .",
-    "dist": "npm run build && electron-builder --mac --universal",
+    "dist": "node scripts/require-api-url.js && npm run build && electron-builder --mac --universal",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
