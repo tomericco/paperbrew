@@ -1,6 +1,6 @@
 import type pg from 'pg';
 
-export type JobType = 'process_email' | 'fetch_article' | 'gmail_sync';
+export type JobType = 'process_email' | 'fetch_article' | 'gmail_sync' | 'create_issue';
 export interface Job {
   id: number;
   type: JobType;
