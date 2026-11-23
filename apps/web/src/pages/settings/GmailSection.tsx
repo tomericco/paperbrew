@@ -19,6 +19,8 @@ const REASONS: Record<string, string> = {
   'blocked-sender': 'You asked to skip this sender',
   'too-short': 'Too short to print',
   'mostly-links': 'Mostly links',
+  // The message was deleted or moved before Paperbrew could read it (sync.ts, isGone).
+  gone: 'No longer in your inbox',
   error: "Couldn't read this one",
   'rules-only (non-English)': 'Not in English, so we kept it',
 };
@@ -113,13 +115,15 @@ export function GmailSection({ step, onStatus }: { step?: number; onStatus?: (s:
   }
 
   // Done only while Paperbrew can actually read the inbox; a lost connection is still a step to take.
-  const status: SectionStatus | null = !state
-    ? null
-    : !state.connected
-      ? { state: 'todo', tone: 'off', label: 'Not set up' }
-      : state.status === 'needs_reconnect'
-        ? { state: 'todo', tone: 'warn', label: 'Reconnect' }
-        : { state: 'done', tone: 'on', label: 'Connected' };
+  const status: SectionStatus | null = loadError
+    ? { state: 'todo', tone: 'warn', label: "Couldn't load" }
+    : !state
+      ? null
+      : !state.connected
+        ? { state: 'todo', tone: 'off', label: 'Not set up' }
+        : state.status === 'needs_reconnect'
+          ? { state: 'todo', tone: 'warn', label: 'Reconnect' }
+          : { state: 'done', tone: 'on', label: 'Connected' };
   useReportStatus(status, onStatus);
 
   let body;

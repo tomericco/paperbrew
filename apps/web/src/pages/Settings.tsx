@@ -239,7 +239,9 @@ function useActiveSection(ids: string[]): [string | null, (id: string) => void] 
 function Progress({ steps, statuses }: { steps: Section[]; statuses: Partial<Record<SectionKey, SectionStatus>> }) {
   const known = steps.every((s) => statuses[s.key]);
   const done = steps.filter((s) => statuses[s.key]?.state === 'done').length;
-  const summary = !known ? 'Checking your setup…' : done === steps.length ? 'All set. Your next paper is on its way.' : `${done} of ${steps.length} ready`;
+  // "Your next paper is on its way" only holds when there is a schedule to make it.
+  const allSet = steps.some((s) => s.key === 'schedule') ? 'All set. Your next paper is on its way.' : 'All set.';
+  const summary = !known ? 'Checking your setup…' : done === steps.length ? allSet : `${done} of ${steps.length} ready`;
   return (
     <div className="progress">
       <p className="progress-summary">{summary}</p>
@@ -265,9 +267,16 @@ function StepDot({ status }: { status: SectionStatus | undefined }) {
   );
 }
 
+/** What a screen reader hears after the step's name: "done", "to do", or "to do, Reconnect" for a problem. */
 function stepStateText(status: SectionStatus | undefined): string {
   if (!status) return 'checking';
-  return status.state === 'done' ? 'done' : 'to do';
+  if (status.state === 'done') return 'done';
+  return status.tone === 'warn' ? `to do, ${status.label}` : 'to do';
+}
+
+/** The setup's name: a weekly paper only when there is a schedule step to make one. */
+function setupTitle(steps: Section[]): string {
+  return steps.some((s) => s.key === 'schedule') ? 'Your weekly paper' : 'Your setup';
 }
 
 /** Phones and tablets: the three setup steps in a row, each jumping to its section. */
@@ -285,7 +294,7 @@ function SetupStrip({
   return (
     <nav className="setup" aria-labelledby="setup-title">
       <div className="setup-head">
-        <h2 id="setup-title">Your weekly paper</h2>
+        <h2 id="setup-title">{setupTitle(steps)}</h2>
         {progress}
       </div>
       <ol className="setup-steps" style={{ '--steps': steps.length } as CSSProperties}>
@@ -303,8 +312,9 @@ function SetupStrip({
                 </span>
                 <span className="setup-label">{s.label}</span>
                 <span className="setup-hint">
-                  <span className="visually-hidden">, {stepStateText(status)}: </span>
-                  <span aria-hidden="true">{!status ? 'Checking' : status.state === 'done' ? 'Done' : s.todo}</span>
+                  <span className="visually-hidden">: {stepStateText(status)}</span>
+                  {/* A problem (lost access, no days, couldn't load) shows its own words instead of the to-do. */}
+                  <span aria-hidden="true">{!status ? 'Checking' : status.state === 'done' ? 'Done' : status.tone === 'warn' ? status.label : s.todo}</span>
                 </span>
               </a>
             </li>
@@ -333,7 +343,7 @@ function SidePanel({
     <nav className="settings-panel" aria-label="Settings sections" style={{ '--i': 1 } as CSSProperties}>
       {progress && (
         <div className="panel-progress">
-          <p className="panel-kicker">Your weekly paper</p>
+          <p className="panel-kicker">{setupTitle(sections.filter((s) => s.step !== undefined))}</p>
           {progress}
         </div>
       )}

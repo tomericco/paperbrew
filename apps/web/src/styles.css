@@ -1720,6 +1720,13 @@ button:disabled {
   flex: none;
 }
 
+.card-body .account-hint {
+  margin: 12px 0 0 58px;
+  font-size: 15px;
+  color: var(--ink-soft);
+}
+
+
 /* "Google asked us to sign in again": tinted, calm, with one clear way out. */
 .card-alert {
   display: grid;
@@ -1749,9 +1756,11 @@ button:disabled {
   margin-top: 10px;
 }
 
-/* Small rounded status tags: Saved / Skipped, Waiting / Printing / Printed / Couldn't print. */
-.tag {
+/* Small rounded status tags: Saved / Skipped, Waiting / Printing / Printed / Couldn't print.
+   Scoped to Settings: the Library's own .tag (Gmail, Not printed) is defined above. */
+.settings .tag {
   flex: none;
+  margin: 0;
   display: inline-flex;
   align-items: center;
   padding: 2px 9px;
@@ -1763,18 +1772,18 @@ button:disabled {
   color: var(--ink-soft);
 }
 
-.tag-ink {
+.settings .tag-ink {
   background: var(--ink);
   border-color: var(--ink);
   color: #fff;
 }
 
-.tag-outline {
+.settings .tag-outline {
   border-color: var(--ink);
   color: var(--ink);
 }
 
-.tag-warn {
+.settings .tag-warn {
   border-color: #b00020;
   color: #b00020;
 }
@@ -1876,10 +1885,12 @@ button:disabled {
   width: 48px;
   height: 28px;
   margin: 0;
+  /* Off: a white track with a mid-grey edge and thumb, over 3:1 against the tinted row. */
+  border: 2px solid #767676;
   border-radius: 999px;
-  background: #cfc8ba;
+  background: #fff;
   cursor: pointer;
-  transition: background-color 180ms;
+  transition: background-color 180ms, border-color 180ms;
 }
 
 .switch::before {
@@ -1887,19 +1898,20 @@ button:disabled {
   position: absolute;
   top: 3px;
   left: 3px;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(17, 17, 17, 0.25);
-  transition: transform 200ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  background: #767676;
+  transition: transform 200ms cubic-bezier(0.2, 0.7, 0.2, 1), background-color 180ms;
 }
 
 .switch:checked {
+  border-color: var(--ink);
   background: var(--ink);
 }
 
 .switch:checked::before {
+  background: #fff;
   transform: translateX(20px);
 }
 
@@ -1935,12 +1947,6 @@ button:disabled {
   padding: 8px 14px;
   font-size: 14px;
   color: var(--ink-soft);
-}
-
-.quick-picks button[aria-pressed='true'] {
-  border-color: var(--paper-line);
-  background: var(--paper);
-  color: var(--ink);
 }
 
 .day-chips {
@@ -2311,6 +2317,46 @@ button:disabled {
   .quick-picks button,
   .card-more {
     min-height: 44px;
+  }
+}
+
+/* Windows High Contrast and other forced colours: backgrounds and shadows are dropped, so each
+   chosen state gets a system-coloured border or fill of its own. */
+@media (forced-colors: active) {
+  .paper-choice:has(.paper-radio:checked),
+  .budget-choice:has(.paper-radio:checked) {
+    border: 3px solid Highlight;
+  }
+
+  .paper-choice:has(.paper-radio:checked) .paper-check {
+    border-color: Highlight;
+    color: Highlight;
+  }
+
+  .day-chip[aria-pressed='true'] {
+    forced-color-adjust: none;
+    background: Highlight;
+    border-color: Highlight;
+    color: HighlightText;
+  }
+
+  .switch {
+    forced-color-adjust: none;
+    border-color: ButtonText;
+    background: Canvas;
+  }
+
+  .switch::before {
+    background: ButtonText;
+  }
+
+  .switch:checked {
+    border-color: Highlight;
+    background: Highlight;
+  }
+
+  .switch:checked::before {
+    background: HighlightText;
   }
 }
 

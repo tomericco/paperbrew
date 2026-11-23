@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { shortDate } from '../article';
 import { errorText } from '../layouts';
 import { relativeTime } from './GmailSection';
 import { SettingsCard, StatusPill, useReportStatus } from './SettingsCard';
@@ -29,6 +30,7 @@ const STATUS_TAGS: Record<IssueStatus, string> = {
 const POLL_MS = 2000;
 const GIVE_UP_MS = 10 * 60 * 1000;
 const HELP_AFTER_MS = 5000;
+const SEEN_RECENTLY_MS = 15 * 60 * 1000;
 
 const CONNECT_ERROR = "Couldn't start the connection. Try again.";
 
@@ -42,7 +44,7 @@ async function getJson<T>(path: string): Promise<T | null> {
   return (await res.json()) as T;
 }
 
-/** "Today 7:00 AM", "Yesterday 7:00 AM", then "Nov 22" for anything older. */
+/** "Today 7:00 AM", "Yesterday 7:00 AM", then "Nov 22, 7:00 AM" (with the year when it isn't this year). */
 export function friendlyDate(iso: string, now = new Date()): string {
   const date = new Date(iso);
   const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
@@ -50,11 +52,7 @@ export function friendlyDate(iso: string, now = new Date()): string {
   const daysAgo = Math.round((day(now) - day(date)) / 86400000);
   if (daysAgo === 0) return `Today ${time}`;
   if (daysAgo === 1) return `Yesterday ${time}`;
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    ...(date.getFullYear() !== now.getFullYear() && { year: 'numeric' }),
-  });
+  return `${shortDate(iso)}, ${time}`;
 }
 
 function PrinterGlyph() {
@@ -218,35 +216,44 @@ export function PrinterSection({
     }
   }
 
-  const status: SectionStatus | null = !devices
-    ? null
-    : devices.length > 0
-      ? { state: 'done', tone: 'on', label: 'Ready' }
-      : { state: 'todo', tone: 'off', label: 'Not set up' };
+  // The app checks in every minute, so a Mac quiet for 15 minutes is not ready to print.
+  const device = devices?.[0];
+  const fresh = !!device?.lastSeenAt && Date.now() - new Date(device.lastSeenAt).getTime() < SEEN_RECENTLY_MS;
+  const status: SectionStatus | null = loadError
+    ? { state: 'todo', tone: 'warn', label: "Couldn't load" }
+    : !devices
+      ? null
+      : !device
+        ? { state: 'todo', tone: 'off', label: 'Not set up' }
+        : fresh
+          ? { state: 'done', tone: 'on', label: 'Ready' }
+          : { state: 'todo', tone: 'warn', label: 'Not seen lately' };
   useReportStatus(status, onStatus);
 
   let body;
   if (loadError) body = <p className="error">{loadError}</p>;
   else if (!devices || !issues) body = <p className="muted">Loading…</p>;
   else {
-    const device = devices[0];
     body = (
       <>
         <div className="card-group">
           {device ? (
-            <div className="account-row">
-              <span className="account-glyph" aria-hidden="true">
-                <PrinterGlyph />
-              </span>
-              <div className="account-who">
-                <span className="account-name">{device.name}</span>
-                <span className="muted">{device.lastSeenAt ? `Last seen ${relativeTime(device.lastSeenAt)}` : 'Not seen yet'}</span>
+            <>
+              <div className="account-row">
+                <span className="account-glyph" aria-hidden="true">
+                  <PrinterGlyph />
+                </span>
+                <div className="account-who">
+                  <span className="account-name">{device.name}</span>
+                  <span className="muted">{device.lastSeenAt ? `Last seen ${relativeTime(device.lastSeenAt)}` : 'Not seen yet'}</span>
+                </div>
+                <StatusPill status={fresh ? { tone: 'on', label: 'Connected' } : { tone: 'warn', label: 'Not seen lately' }} />
+                <button type="button" className="card-action" onClick={() => void removeDevice(device)} disabled={removing}>
+                  {removing ? 'Removing…' : 'Remove'}
+                </button>
               </div>
-              <StatusPill status={{ tone: 'on', label: 'Connected' }} />
-              <button type="button" className="card-action" onClick={() => void removeDevice(device)} disabled={removing}>
-                {removing ? 'Removing…' : 'Remove'}
-              </button>
-            </div>
+              {!fresh && <p className="account-hint">Open the Paperbrew app on your Mac so it can print.</p>}
+            </>
           ) : (
             <ol className="guide-steps">
               <li className="guide-step">

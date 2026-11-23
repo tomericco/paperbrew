@@ -90,8 +90,6 @@ function nowIn(timeZone: string): string | null {
   }
 }
 
-const sameDays = (a: number[], b: number[]) => a.length === b.length && b.every((d) => a.includes(d));
-
 export function ScheduleSection({ step, onStatus }: { step?: number; onStatus?: (s: SectionStatus) => void }) {
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -174,13 +172,15 @@ export function ScheduleSection({ step, onStatus }: { step?: number; onStatus?: 
   }
 
   // On with no days picked brews nothing, so it is not done yet.
-  const status: SectionStatus | null = !schedule
-    ? null
-    : !schedule.enabled
-      ? { state: 'todo', tone: 'off', label: 'Off' }
-      : schedule.days.length === 0
-        ? { state: 'todo', tone: 'warn', label: 'No days' }
-        : { state: 'done', tone: 'on', label: 'On' };
+  const status: SectionStatus | null = loadError
+    ? { state: 'todo', tone: 'warn', label: "Couldn't load" }
+    : !schedule
+      ? null
+      : !schedule.enabled
+        ? { state: 'todo', tone: 'off', label: 'Off' }
+        : schedule.days.length === 0
+          ? { state: 'todo', tone: 'warn', label: 'No days' }
+          : { state: 'done', tone: 'on', label: 'On' };
   useReportStatus(status, onStatus);
 
   let body;
@@ -196,10 +196,23 @@ export function ScheduleSection({ step, onStatus }: { step?: number; onStatus?: 
       <div className="schedule-controls" aria-busy={saving}>
         <label className="switch-row">
           <span className="switch-text">
-            <span className="switch-label">Make my paper automatically</span>
-            <span className="group-hint">Paperbrew puts an issue together on the days you pick.</span>
+            <span className="switch-label" id="schedule-switch-label">
+              Make my paper automatically
+            </span>
+            <span className="group-hint" id="schedule-switch-hint">
+              Paperbrew puts an issue together on the days you pick.
+            </span>
           </span>
-          <input className="switch" type="checkbox" role="switch" checked={schedule.enabled} onChange={(e) => void save({ brewEnabled: e.target.checked })} />
+          {/* Named by the label line alone; the hint is its description. */}
+          <input
+            className="switch"
+            type="checkbox"
+            role="switch"
+            aria-labelledby="schedule-switch-label"
+            aria-describedby="schedule-switch-hint"
+            checked={schedule.enabled}
+            onChange={(e) => void save({ brewEnabled: e.target.checked })}
+          />
         </label>
 
         {schedule.enabled && (
@@ -210,20 +223,10 @@ export function ScheduleSection({ step, onStatus }: { step?: number; onStatus?: 
                   Which days
                 </h3>
                 <div className="quick-picks">
-                  <button
-                    type="button"
-                    className="btn-quiet"
-                    aria-pressed={sameDays(schedule.days, WEEKDAYS)}
-                    onClick={() => void save({ brewDays: WEEKDAYS })}
-                  >
+                  <button type="button" className="btn-quiet" onClick={() => void save({ brewDays: WEEKDAYS })}>
                     Weekdays
                   </button>
-                  <button
-                    type="button"
-                    className="btn-quiet"
-                    aria-pressed={sameDays(schedule.days, EVERY_DAY)}
-                    onClick={() => void save({ brewDays: EVERY_DAY })}
-                  >
+                  <button type="button" className="btn-quiet" onClick={() => void save({ brewDays: EVERY_DAY })}>
                     Every day
                   </button>
                 </div>
