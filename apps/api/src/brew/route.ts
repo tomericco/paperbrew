@@ -2,10 +2,9 @@ import { Hono } from 'hono';
 import { pool } from '../db/client.js';
 import { requireUser, type UserEnv } from '../routes/library.js';
 import { BusyError } from './lifecycle.js';
-import { htmlToPdf } from './pdf.js';
-import { imposeBooklet } from './booklet.js';
+import { renderIssuePdf } from './issuePdf.js';
 import type { PaperLayout } from './layout.js';
-import { magazineDirection, renderMagazine, type BrewArticle } from './render.js';
+import type { BrewArticle } from './render.js';
 
 const MAX_ARTICLES = 50;
 
@@ -49,19 +48,7 @@ brew.get('/brew', async (c) => {
   const date = new Date();
   let pdf: ReadableStream<Uint8Array>;
   try {
-    pdf = await htmlToPdf(renderMagazine({ date, articles, layout }));
-    if (layout === 'booklet') {
-      // Read to the end: that is what releases the browser slot.
-      // Imposition runs after the htmlToPdf stream is drained (slot already released) on purpose: keeps Chromium's slot short; it is ~1 s of CPU.
-      const a5 = new Uint8Array(await new Response(pdf).arrayBuffer());
-      const sheets = await imposeBooklet(a5, magazineDirection(articles));
-      pdf = new ReadableStream({
-        start(controller) {
-          controller.enqueue(sheets);
-          controller.close();
-        },
-      });
-    }
+    pdf = await renderIssuePdf(articles, layout, date);
   } catch (err) {
     if (err instanceof BusyError) {
       return c.json({ error: 'Another magazine is brewing. Try again in a minute.' }, 503);
