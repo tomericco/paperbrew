@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { errorText } from '../layouts';
+import { SettingsCard, useReportStatus } from './SettingsCard';
+import type { SectionStatus } from './SettingsCard';
 
 type Decision = 'rule_skip' | 'not_editorial' | 'editorial';
 
@@ -30,7 +32,7 @@ export function relativeTime(iso: string): string {
   return rtf.format(-Math.round(hours / 24), 'day');
 }
 
-export function GmailSection() {
+export function GmailSection({ step, onStatus }: { step?: number; onStatus?: (s: SectionStatus) => void }) {
   const [state, setState] = useState<GmailState | null>(null);
   const [loadError, setLoadError] = useState('');
   const [disconnecting, setDisconnecting] = useState(false);
@@ -70,6 +72,16 @@ export function GmailSection() {
       setDisconnecting(false);
     }
   }
+
+  // Done only while Paperbrew can actually read the inbox; a lost connection is still a step to take.
+  const status: SectionStatus | null = !state
+    ? null
+    : !state.connected
+      ? { state: 'todo', tone: 'off', label: 'Not set up' }
+      : state.status === 'needs_reconnect'
+        ? { state: 'todo', tone: 'warn', label: 'Reconnect' }
+        : { state: 'done', tone: 'on', label: 'Connected' };
+  useReportStatus(status, onStatus);
 
   let body;
   if (loadError) body = <p className="error">{loadError}</p>;
@@ -138,9 +150,14 @@ export function GmailSection() {
     );
 
   return (
-    <section className="settings-section" aria-labelledby="settings-gmail">
-      <h2 id="settings-gmail">Gmail</h2>
+    <SettingsCard
+      id="newsletters"
+      step={step}
+      title="Your newsletters"
+      description="Paperbrew finds the good ones in your Gmail and saves them for you."
+      status={status ?? undefined}
+    >
       {body}
-    </section>
+    </SettingsCard>
   );
 }

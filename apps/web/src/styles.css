@@ -743,22 +743,45 @@ button:disabled {
   margin-right: 6px;
 }
 
-/* Settings: a stack of sections, each a heading over its controls. */
+/* Settings: "your weekly paper, set up in three steps". A friendly header, then on desktop a sticky
+   side panel beside the sections; on phones and tablets sticky section chips and a setup strip above
+   them. Each section is a paper slip (.settings-card). The custom properties stay local to this page. */
 
 .settings {
-  max-width: 44rem;
-}
-
-.settings h1 {
-  margin: 8px 0 16px;
+  --paper: #faf8f3;
+  --paper-line: #e9e3d6;
+  --ink: #111;
+  --ink-soft: #555;
+  --muted: #6b6b6b;
+  --line: #e6e6e6;
+  --sheet-shadow: 0 1px 2px rgba(17, 17, 17, 0.04), 0 6px 18px rgba(17, 17, 17, 0.04);
+  min-width: 0;
 }
 
 .settings .muted {
-  color: #6b6b6b;
+  color: var(--muted);
 }
 
 .settings .error {
   color: #b00020;
+}
+
+.settings-head {
+  max-width: 40rem;
+  margin: 8px 0 28px;
+}
+
+.settings .settings-head h1 {
+  margin: 0 0 10px;
+  font-size: 40px;
+}
+
+.settings-lede {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  text-wrap: pretty;
 }
 
 /* Always present, so a notice added later is announced. */
@@ -767,37 +790,851 @@ button:disabled {
 }
 
 .notice {
-  margin: 0 0 16px;
-  padding: 10px 14px;
+  margin: 20px 0 0;
+  padding: 12px 16px;
   background: #f5f2ec;
   border-radius: 4px;
 }
 
-.settings-section {
-  padding: 20px 0 8px;
-  border-top: 1px solid #e6e6e6;
+.settings-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.settings-section h2 {
-  margin: 0 0 12px;
-  font-size: 13px;
+.settings-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+  min-width: 0;
+}
+
+/* Desktop side panel: setup progress, then every section with its status. */
+
+.settings-panel {
+  display: none;
+  padding: 20px 12px 12px;
+  background: var(--paper);
+  border: 1px solid var(--paper-line);
+  border-radius: 6px;
+}
+
+.panel-progress {
+  padding: 0 8px 18px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--paper-line);
+}
+
+.panel-kicker {
+  margin: 0 0 4px;
+  font-size: 18px;
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  line-height: 1.3;
 }
 
-.settings-section h3 {
-  margin: 20px 0 8px;
+.progress-summary {
+  margin: 0 0 12px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+.progress-meter {
+  display: flex;
+  gap: 4px;
+}
+
+.progress-seg {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: #e2dccf;
+  transition: background-color 300ms;
+}
+
+.progress-seg.is-done {
+  background: var(--ink);
+}
+
+.panel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.panel-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--ink);
+  text-decoration: none;
+  transition: background-color 160ms, border-color 160ms;
+}
+
+.panel-link.is-current {
+  background: #fff;
+  border-color: var(--paper-line);
+  box-shadow: var(--sheet-shadow);
+}
+
+.panel-link:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .panel-link:not(.is-current):hover {
+    background: rgba(255, 255, 255, 0.7);
+    border-color: var(--paper-line);
+  }
+}
+
+.panel-mark,
+.card-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--ink);
+  border-radius: 50%;
+  font-family: 'Fraunces', 'Source Serif 4', Georgia, serif;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.panel-mark {
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+  transition: background-color 160ms, color 160ms;
+}
+
+/* The section in view: a filled marker. */
+.panel-link.is-current .panel-mark {
+  background: var(--ink);
+  color: #fff;
+}
+
+.panel-text {
+  display: grid;
+  min-width: 0;
+}
+
+.panel-label {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.panel-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.panel-status::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+
+.panel-status.tone-on {
+  color: var(--ink);
+}
+
+.panel-status.tone-on::before,
+.panel-status.tone-warn::before {
+  background: currentColor;
+}
+
+.panel-status.tone-warn {
+  color: #b00020;
+}
+
+.panel-status.is-loading {
+  color: var(--muted);
+}
+
+.panel-status.is-loading::before {
+  box-shadow: none;
+  background: #cfc8ba;
+}
+
+/* Phones and tablets: sticky section chips under the header, scrolling sideways inside their own row. */
+
+.settings-chips {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin: 0 calc(-1 * var(--gutter)) 20px;
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-chips ul {
+  list-style: none;
+  margin: 0;
+  padding: 8px var(--gutter);
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.settings-chips ul::-webkit-scrollbar {
+  display: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 15px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 160ms, color 160ms, border-color 160ms;
+}
+
+.chip[aria-current='location'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .chip:not([aria-current]):hover {
+    border-color: var(--ink);
+  }
+}
+
+/* Phones and tablets: the setup steps in a row, each jumping to its section. */
+
+.setup {
+  padding: 18px 18px 12px;
+  background: var(--paper);
+  border: 1px solid var(--paper-line);
+  border-radius: 6px;
+}
+
+.setup-head {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 12px;
+}
+
+.setup-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.setup .progress-summary {
+  margin: 0;
+}
+
+/* The step dots already show each step; the meter is for the side panel. */
+.setup .progress-meter {
+  display: none;
+}
+
+.setup-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--steps, 3), minmax(0, 1fr));
+}
+
+.setup-link {
+  display: grid;
+  gap: 2px;
+  min-height: 44px;
+  padding: 6px 4px 6px 0;
+  border-radius: 4px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.setup-link:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .setup-link:hover .setup-label {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+.setup-track {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.setup-num {
+  font-family: 'Fraunces', 'Source Serif 4', Georgia, serif;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink-soft);
+}
+
+.setup-line {
+  flex: 1;
+  height: 1px;
+  margin-right: 8px;
+  background: #d9d2c4;
+  transition: background-color 300ms;
+}
+
+.setup-step:last-child .setup-line {
+  visibility: hidden;
+}
+
+.setup-step.is-done .setup-line {
+  background: var(--ink);
+}
+
+.setup-label {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.setup-hint {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--ink-soft);
+}
+
+/* A step's state: an empty ring to do, a filled circle with a check that draws in when done. */
+.step-dot {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+  background: #fff;
+  color: #fff;
+  transition: background-color 200ms, border-color 200ms;
+}
+
+.step-dot.is-done {
+  background: var(--ink);
+}
+
+.step-dot.is-done path {
+  stroke-dasharray: 12;
+  stroke-dashoffset: 0;
+  animation: settings-check-draw 320ms 120ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+}
+
+.step-dot.is-loading {
+  border-color: #d9d2c4;
+}
+
+.step-dot.is-loading::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #a39b8c;
+  animation: settings-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes settings-check-draw {
+  from {
+    stroke-dashoffset: 12;
+  }
+}
+
+@keyframes settings-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+/* A section: a paper slip with a numbered header, a hairline, then its controls. */
+
+.settings-card {
+  position: relative;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: var(--sheet-shadow);
+  /* Clear of the sticky chips on phones. */
+  scroll-margin-top: 76px;
+}
+
+.settings-card:focus {
+  outline: none;
+}
+
+.settings-card:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.card-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 14px;
+  padding-bottom: 20px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.card-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-height: 30px;
+}
+
+.card-title-row h2 {
+  margin: 0 auto 0 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.settings-card .card-desc {
+  max-width: 34rem;
+  margin: 8px 0 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+  text-wrap: pretty;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 9px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 13px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.pill::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.pill-on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.pill-off {
+  border-color: #d9d2c4;
+  color: var(--ink-soft);
+}
+
+.pill-off::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+
+.pill-warn {
+  border-color: #b00020;
+  color: #b00020;
+}
+
+/* "Saved", beside a card's title for a moment after a change. */
+.saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  color: var(--ink);
+  opacity: 0;
+  transition: opacity 300ms;
+}
+
+.saved.is-shown {
+  opacity: 1;
+}
+
+/* Inside a card: groups set apart by a hairline, not just space. */
+
+.card-body p {
+  margin: 0 0 14px;
+}
+
+.card-body > :last-child {
+  margin-bottom: 0;
+}
+
+.card-group + .card-group,
+.card-body h3 {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+
+.card-body h3 {
+  margin-bottom: 14px;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #6b6b6b;
+  color: var(--muted);
 }
 
-.settings-section p {
-  margin: 0 0 12px;
+@media (min-width: 600px) {
+  .settings-card {
+    padding: 30px 32px 32px;
+  }
+
+  .card-head {
+    padding-bottom: 24px;
+    margin-bottom: 28px;
+  }
+
+  .card-title-row h2 {
+    font-size: 22px;
+  }
 }
+
+@media (min-width: 900px) {
+  .settings-body {
+    grid-template-columns: 15rem minmax(0, 42rem);
+    column-gap: 48px;
+    align-items: start;
+  }
+
+  .settings-panel {
+    display: block;
+    position: sticky;
+    top: 24px;
+  }
+
+  .settings-main {
+    gap: 40px;
+  }
+
+  .settings-card {
+    scroll-margin-top: 24px;
+  }
+
+  /* The side panel carries both the progress and the section list here. */
+  .settings-chips,
+  .setup {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .settings .settings-head h1 {
+    font-size: 30px;
+  }
+
+  .settings-head {
+    margin-bottom: 20px;
+  }
+
+  .settings-lede {
+    font-size: 17px;
+  }
+}
+
+/* Paper: two picture cards; the real radios stay in the labels, hidden but focusable. */
+
+.paper-choices {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 16px;
+}
+
+.paper-choice {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 160ms, box-shadow 160ms;
+}
+
+.paper-choices[aria-busy='true'] .paper-choice {
+  cursor: progress;
+}
+
+.paper-radio {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.paper-art {
+  display: grid;
+  place-items: center;
+  height: 124px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--paper-line);
+  transition: background-color 160ms;
+}
+
+.paper-svg {
+  transition: transform 200ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.paper-svg .sheet {
+  fill: #fff;
+  stroke: var(--ink);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+}
+
+.paper-svg .sheet-text {
+  fill: none;
+  stroke: #bdb5a6;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.paper-svg .staple {
+  stroke: var(--ink);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.paper-svg .fold {
+  stroke: var(--ink);
+  stroke-width: 1.25;
+  stroke-dasharray: 3 3;
+}
+
+.paper-text {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 16px 18px 18px;
+}
+
+.paper-label {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.paper-hint {
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.paper-check {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1.5px solid #cfc8ba;
+  border-radius: 50%;
+  background: #fff;
+  color: transparent;
+  transition: background-color 160ms, border-color 160ms, color 160ms;
+}
+
+.paper-choice:has(.paper-radio:checked) {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+
+.paper-choice:has(.paper-radio:checked) .paper-art {
+  background: #f5f2ec;
+}
+
+.paper-choice:has(.paper-radio:checked) .paper-check {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.paper-choice:has(.paper-radio:checked) .paper-check path {
+  stroke-dasharray: 12;
+  animation: settings-check-draw 260ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+}
+
+.paper-choice:has(.paper-radio:focus-visible) {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+@media (hover: hover) {
+  .paper-choice:not(:has(.paper-radio:checked)):hover {
+    border-color: #9a9a9a;
+  }
+
+  .paper-choice:hover .paper-svg {
+    transform: translateY(-2px);
+  }
+}
+
+/* Phones: each choice is a row, picture on the left. */
+@media (max-width: 600px) {
+  .paper-choice {
+    grid-template-columns: 96px minmax(0, 1fr);
+    grid-template-rows: auto;
+  }
+
+  .paper-art {
+    height: auto;
+    min-height: 104px;
+    border-bottom: 0;
+    border-right: 1px solid var(--paper-line);
+  }
+
+  .paper-svg {
+    width: 84px;
+    height: auto;
+  }
+
+  .paper-text {
+    align-content: center;
+    padding: 14px 44px 14px 14px;
+  }
+
+  .paper-label {
+    font-size: 16px;
+  }
+}
+
+/* Loading: three faint card shapes. */
+
+.skeleton-card {
+  height: 160px;
+  background: var(--paper);
+  border: 1px solid #f0ebe1;
+  border-radius: 6px;
+}
+
+.skeleton-card:nth-of-type(2) {
+  height: 220px;
+}
+
+.skeleton-card:nth-of-type(3) {
+  height: 140px;
+}
+
+.settings-panel-ghost {
+  min-height: 300px;
+}
+
+/* On load: the header, panel, chips and cards rise into place, a few frames apart. */
+
+@keyframes settings-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.settings-head,
+.settings-panel,
+.settings-chips,
+.settings-main > * {
+  animation: settings-rise 300ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 35ms);
+}
+
+.settings-main > :nth-child(1) {
+  --i: 2;
+}
+
+.settings-main > :nth-child(2) {
+  --i: 3;
+}
+
+.settings-main > :nth-child(3) {
+  --i: 4;
+}
+
+.settings-main > :nth-child(4) {
+  --i: 5;
+}
+
+.settings-main > :nth-child(n + 5) {
+  --i: 6;
+}
+
+.settings-skeleton > .skeleton-card,
+.settings-panel-ghost {
+  animation: settings-pulse 1.6s ease-in-out infinite;
+}
+
+/* No motion: everything simply appears, and jumps don't glide (see Settings.tsx). */
+@media (prefers-reduced-motion: reduce) {
+  .settings *,
+  .settings *::before,
+  .settings *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .paper-choice:hover .paper-svg {
+    transform: none;
+  }
+}
+
+/* Section internals (Gmail, Schedule, Printer). */
 
 .choices {
   margin: 0;
@@ -853,7 +1690,7 @@ button:disabled {
   border: 0;
   min-width: 0;
   display: grid;
-  gap: 16px;
+  gap: 24px;
 }
 
 .field {
@@ -920,7 +1757,7 @@ button:disabled {
   }
 }
 
-.settings-section .schedule-next {
+.card-body .schedule-next {
   margin: 0;
   font-weight: 600;
 }

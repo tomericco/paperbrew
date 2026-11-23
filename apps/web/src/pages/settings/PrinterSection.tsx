@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { errorText } from '../layouts';
 import { relativeTime } from './GmailSection';
+import { SettingsCard, useReportStatus } from './SettingsCard';
+import type { SectionStatus } from './SettingsCard';
 
 type Device = { id: string; name: string; createdAt: string; lastSeenAt: string | null };
 
@@ -37,7 +39,15 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-export function PrinterSection({ macAppUrl }: { macAppUrl: string }) {
+export function PrinterSection({
+  macAppUrl,
+  step,
+  onStatus,
+}: {
+  macAppUrl: string;
+  step?: number;
+  onStatus?: (s: SectionStatus) => void;
+}) {
   const [devices, setDevices] = useState<Device[] | null>(null);
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -179,6 +189,13 @@ export function PrinterSection({ macAppUrl }: { macAppUrl: string }) {
     }
   }
 
+  const status: SectionStatus | null = !devices
+    ? null
+    : devices.length > 0
+      ? { state: 'done', tone: 'on', label: 'Ready' }
+      : { state: 'todo', tone: 'off', label: 'Not set up' };
+  useReportStatus(status, onStatus);
+
   let body;
   if (loadError) body = <p className="error">{loadError}</p>;
   else if (!devices || !issues) body = <p className="muted">Loading…</p>;
@@ -266,9 +283,14 @@ export function PrinterSection({ macAppUrl }: { macAppUrl: string }) {
   }
 
   return (
-    <section className="settings-section" aria-labelledby="settings-printer">
-      <h2 id="settings-printer">Printer</h2>
+    <SettingsCard
+      id="printer"
+      step={step}
+      title="Your printer"
+      description="Install the Paperbrew app on your Mac and your paper prints by itself."
+      status={status ?? undefined}
+    >
       {body}
-    </section>
+    </SettingsCard>
   );
 }

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { errorText } from '../layouts';
+import { SettingsCard, useReportStatus } from './SettingsCard';
+import type { SectionStatus } from './SettingsCard';
 
 type Schedule = {
   enabled: boolean;
@@ -76,7 +78,7 @@ function formatNext(iso: string, timeZone: string): string {
   }
 }
 
-export function ScheduleSection() {
+export function ScheduleSection({ step, onStatus }: { step?: number; onStatus?: (s: SectionStatus) => void }) {
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -156,6 +158,16 @@ export function ScheduleSection() {
     const days = schedule.days.includes(day) ? schedule.days.filter((d) => d !== day) : [...schedule.days, day];
     void save({ brewDays: days });
   }
+
+  // On with no days picked brews nothing, so it is not done yet.
+  const status: SectionStatus | null = !schedule
+    ? null
+    : !schedule.enabled
+      ? { state: 'todo', tone: 'off', label: 'Off' }
+      : schedule.days.length === 0
+        ? { state: 'todo', tone: 'warn', label: 'No days' }
+        : { state: 'done', tone: 'on', label: 'On' };
+  useReportStatus(status, onStatus);
 
   let body;
   if (loadError) body = <p className="error">{loadError}</p>;
@@ -254,9 +266,14 @@ export function ScheduleSection() {
   }
 
   return (
-    <section className="settings-section" aria-labelledby="settings-schedule">
-      <h2 id="settings-schedule">Schedule</h2>
+    <SettingsCard
+      id="schedule"
+      step={step}
+      title="Your schedule"
+      description="Pick when your paper gets made. We'll fit as much reading as you have time for."
+      status={status ?? undefined}
+    >
       {body}
-    </section>
+    </SettingsCard>
   );
 }

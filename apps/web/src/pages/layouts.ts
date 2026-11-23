@@ -1,8 +1,8 @@
 export type PaperLayout = 'flat' | 'booklet';
 
 export const LAYOUTS: { value: PaperLayout; label: string; hint: string }[] = [
-  { value: 'flat', label: 'Flat A4', hint: 'Single pages, staple in the corner.' },
-  { value: 'booklet', label: 'Booklet (A4, folded)', hint: 'Print two-sided, flip on short edge, fold and staple.' },
+  { value: 'flat', label: 'Flat A4', hint: 'Single pages, with one staple in the corner.' },
+  { value: 'booklet', label: 'Booklet (A4, folded)', hint: 'Print two-sided, flip on the short edge, then fold and staple.' },
 ];
 
 /** The `error` of a failed API response, or `fallback` when the body has none. */
