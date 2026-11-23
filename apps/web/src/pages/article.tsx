@@ -13,7 +13,7 @@ export type Article = {
 };
 
 /** An archived article as `GET /api/articles?archived=1` returns it. */
-export type ArchivedArticle = Article & { archivedAt: string };
+export type ArchivedArticle = Article & { archivedAt: string; archiveReason: 'printed' | 'skipped' | null };
 
 const STATUS: Record<Article['status'], ReactNode> = {
   ready: null,
@@ -29,7 +29,7 @@ export function shortDate(iso: string): string {
 }
 
 /** The details line under an article title: site, reading time, saved date and status. */
-export function articleMeta(article: Article): ReactNode {
+export function articleMeta(article: Article & { archiveReason?: ArchivedArticle['archiveReason'] }): ReactNode {
   const parts: ReactNode[] = [];
   if (article.siteName) parts.push(article.siteName);
   if (article.wordCount) parts.push(`${Math.max(1, Math.round(article.wordCount / 230))} min read`);
@@ -39,6 +39,7 @@ export function articleMeta(article: Article): ReactNode {
     <>
       {/* First, so the narrow row's ellipsis never hides it. */}
       {article.addedVia === 'gmail' && <span className="tag">Gmail</span>}
+      {article.archiveReason === 'skipped' && <span className="tag">Not printed</span>}
       {parts.map((part, i) => (
         <span key={i}>
           {i > 0 && ' · '}

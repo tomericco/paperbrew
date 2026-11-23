@@ -317,7 +317,8 @@ describe('archiving articles', () => {
   it('GET /articles?archived=1 lists archived with archivedAt', async () => {
     const archivedAt = new Date('2026-11-20T10:00:00.000Z');
     const query = signedIn([
-      { id: A, title: 'T', site_name: 's', source_url: 'https://x.test', status: 'ready', word_count: 10, created_at: new Date('2026-11-01T00:00:00Z'), archived_at: archivedAt },
+      { id: A, title: 'T', site_name: 's', source_url: 'https://x.test', status: 'ready', word_count: 10, created_at: new Date('2026-11-01T00:00:00Z'), archived_at: archivedAt, archive_reason: 'skipped' },
+      { id: B, title: 'U', site_name: 's', source_url: 'https://y.test', status: 'ready', word_count: 10, created_at: new Date('2026-11-01T00:00:00Z'), archived_at: archivedAt },
     ]);
     const res = await app.request('/articles?archived=1', { headers: cookie });
     expect(res.status).toBe(200);
@@ -329,6 +330,9 @@ describe('archiving articles', () => {
     const { articles } = await res.json();
     expect(articles[0].archivedAt).toBe('2026-11-20T10:00:00.000Z');
     expect(articles[0].id).toBe(A);
+    expect(sql).toContain('archive_reason');
+    expect(articles[0].archiveReason).toBe('skipped');
+    expect(articles[1].archiveReason).toBeNull();
   });
 
   it('archives only own, unarchived rows', async () => {
@@ -371,6 +375,7 @@ describe('archiving articles', () => {
     const update = articleSql(query)[0]!;
     expect(String(update[0])).toContain('archived_at = null');
     expect(String(update[0])).toContain('archived_at is not null');
+    expect(String(update[0]).replace(/\s+/g, ' ')).toContain('rollover_count = 0, archive_reason = null');
     expect(update[1]).toEqual([A, 'user-1']);
   });
 

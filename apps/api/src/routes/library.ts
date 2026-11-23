@@ -217,6 +217,7 @@ type ArticleRow = {
   added_via: string;
   created_at: Date;
   archived_at?: Date;
+  archive_reason?: 'printed' | 'skipped' | null;
 };
 
 const toArticle = (r: ArticleRow) => ({
@@ -234,14 +235,14 @@ library.get('/articles', async (c) => {
   const userId = c.get('userId');
   if (c.req.query('archived') === '1') {
     const { rows } = await pool.query<ArticleRow & { archived_at: Date }>(
-      `select id, title, site_name, source_url, status, word_count, added_via, created_at, archived_at
+      `select id, title, site_name, source_url, status, word_count, added_via, created_at, archived_at, archive_reason
        from articles
        where user_id = $1 and archived_at is not null
        order by archived_at desc, created_at asc
        limit 500`,
       [userId],
     );
-    return c.json({ articles: rows.map((r) => ({ ...toArticle(r), archivedAt: r.archived_at })) });
+    return c.json({ articles: rows.map((r) => ({ ...toArticle(r), archivedAt: r.archived_at, archiveReason: r.archive_reason ?? null })) });
   }
   const { rows } = await pool.query<ArticleRow>(
     `select id, title, site_name, source_url, status, word_count, added_via, created_at
@@ -274,7 +275,7 @@ library.post('/articles/:id/unarchive', async (c) => {
   const id = c.req.param('id');
   if (!UUID_RE.test(id)) return c.json({ error: 'not found' }, 404);
   const { rowCount } = await pool.query(
-    'update articles set archived_at = null where id = $1 and user_id = $2 and archived_at is not null',
+    'update articles set archived_at = null, rollover_count = 0, archive_reason = null where id = $1 and user_id = $2 and archived_at is not null',
     [id, c.get('userId')],
   );
   if (!rowCount) return c.json({ error: 'not found' }, 404);

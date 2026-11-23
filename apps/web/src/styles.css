@@ -732,7 +732,7 @@ button:disabled {
   gap: 8px;
 }
 
-/* Gmail tag in an article's details line. */
+/* Gmail and Not printed tags in an article's details line. */
 
 .tag {
   padding: 1px 6px;
