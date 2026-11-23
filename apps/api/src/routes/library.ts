@@ -9,6 +9,7 @@ import { isUniqueViolation, pool } from '../db/client.js';
 import { gmailAvailable } from '../gmail/available.js';
 import { senderEmail } from '../gmail/rules.js';
 import { formatAddress, normalizeToken } from '../inbound/address.js';
+import { nextBrewAt } from '../schedule/schedule.js';
 
 /** Hono env for routes behind `requireUser`: `c.get('userId')` is our `users.id`. */
 export type UserEnv = { Variables: { userId: string } };
@@ -117,13 +118,93 @@ library.put('/me/address', async (c) => {
   }
 });
 
-const SettingsBody = z.object({ paperLayout: z.enum(PAPER_LAYOUTS) });
+const validTimezone = (timeZone: string) => {
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const BUDGET_MINUTES = [30, 45, 60, 90];
+
+const SettingsBody = z
+  .object({
+    paperLayout: z.enum(PAPER_LAYOUTS),
+    brewEnabled: z.boolean(),
+    brewDays: z
+      .array(z.number().int().min(0).max(6))
+      .max(7)
+      .refine((days) => new Set(days).size === days.length),
+    brewHour: z.number().int().min(0).max(23),
+    brewTimezone: z.string().refine(validTimezone),
+    brewBudgetMinutes: z.number().refine((n) => BUDGET_MINUTES.includes(n)),
+  })
+  .partial()
+  .refine((b) => Object.values(b).some((v) => v !== undefined));
+
+const SETTINGS_ERROR =
+  'Send at least one of paperLayout (flat or booklet), brewEnabled, brewDays (0-6), brewHour (0-23), brewTimezone (IANA) or brewBudgetMinutes (30, 45, 60 or 90)';
+
+type SettingsRow = {
+  paper_layout: PaperLayout;
+  brew_enabled: boolean;
+  brew_days: number[];
+  brew_hour: number;
+  brew_timezone: string;
+  brew_budget_minutes: number;
+};
 
 library.put('/me/settings', async (c) => {
   const body = SettingsBody.safeParse(await c.req.json().catch(() => null));
-  if (!body.success) return c.json({ error: 'paperLayout must be flat or booklet' }, 400);
-  await pool.query('update users set paper_layout = $1 where id = $2', [body.data.paperLayout, c.get('userId')]);
-  return c.json({ paperLayout: body.data.paperLayout });
+  if (!body.success) return c.json({ error: SETTINGS_ERROR }, 400);
+  const b = body.data;
+
+  // Only the provided keys are set; every value goes in as a parameter.
+  const columns: Array<[string, unknown]> = [];
+  if (b.paperLayout !== undefined) columns.push(['paper_layout', b.paperLayout]);
+  if (b.brewEnabled !== undefined) columns.push(['brew_enabled', b.brewEnabled]);
+  if (b.brewDays !== undefined) columns.push(['brew_days', [...b.brewDays].sort((x, y) => x - y)]);
+  if (b.brewHour !== undefined) columns.push(['brew_hour', b.brewHour]);
+  if (b.brewTimezone !== undefined) columns.push(['brew_timezone', b.brewTimezone]);
+  if (b.brewBudgetMinutes !== undefined) columns.push(['brew_budget_minutes', b.brewBudgetMinutes]);
+
+  const sets = columns.map(([column], i) => `${column} = $${i + 1}`).join(', ');
+  const { rows } = await pool.query<SettingsRow>(
+    `update users set ${sets} where id = $${columns.length + 1} returning paper_layout, brew_enabled, brew_days, brew_hour, brew_timezone, brew_budget_minutes`,
+    [...columns.map(([, value]) => value), c.get('userId')],
+  );
+  const row = rows[0];
+  if (!row) return c.json({ error: 'not found' }, 404);
+  return c.json({
+    paperLayout: row.paper_layout,
+    brewEnabled: row.brew_enabled,
+    brewDays: row.brew_days,
+    brewHour: row.brew_hour,
+    brewTimezone: row.brew_timezone,
+    brewBudgetMinutes: row.brew_budget_minutes,
+  });
+});
+
+library.get('/me/schedule', async (c) => {
+  const { rows } = await pool.query<Omit<SettingsRow, 'paper_layout'>>(
+    'select brew_enabled, brew_days, brew_hour, brew_timezone, brew_budget_minutes from users where id = $1',
+    [c.get('userId')],
+  );
+  const row = rows[0];
+  if (!row) return c.json({ error: 'not found' }, 404);
+  const next = row.brew_enabled
+    ? nextBrewAt({ days: row.brew_days, hour: row.brew_hour, timezone: row.brew_timezone }, new Date())
+    : null;
+  return c.json({
+    enabled: row.brew_enabled,
+    days: row.brew_days,
+    hour: row.brew_hour,
+    timezone: row.brew_timezone,
+    budgetMinutes: row.brew_budget_minutes,
+    nextBrewAt: next ? next.toISOString() : null,
+  });
 });
 
 type ArticleRow = {
