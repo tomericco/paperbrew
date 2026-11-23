@@ -32,6 +32,7 @@ export function parsePairLink(link: string): PairLink | null {
     return null;
   }
   if (api.username || api.password) return null;
+  // Callers MUST confirm non-localhost hosts with the user before sending anything to them.
   const okHost =
     api.protocol === 'https:' || (api.protocol === 'http:' && api.hostname === 'localhost');
   if (!okHost) return null;

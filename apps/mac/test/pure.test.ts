@@ -21,6 +21,18 @@ describe('lpArgs', () => {
   });
 });
 
+describe('lpArgs validation', () => {
+  it('throws for a file that is not an absolute path', () => {
+    expect(() => lpArgs('-evil', 'flat', null)).toThrow();
+    expect(() => lpArgs('relative.pdf', 'booklet', null)).toThrow();
+    expect(() => lpArgs('', 'flat', null)).toThrow();
+  });
+  it('throws for an empty or option-like printer', () => {
+    expect(() => lpArgs('/t/x.pdf', 'flat', '-x')).toThrow();
+    expect(() => lpArgs('/t/x.pdf', 'flat', '')).toThrow();
+  });
+});
+
 describe('parsePrinters', () => {
   it('puts the default first and flags it', () => {
     const out = [
@@ -90,6 +102,32 @@ describe('parsePairLink', () => {
     expect(parsePairLink('paperbrew://other?code=K7P29QXM&api=https%3A%2F%2Fpaperbrew.app')).toBeNull();
     expect(parsePairLink('paperbrew://evil.com/pair?code=K7P29QXM&api=https%3A%2F%2Fpaperbrew.app')).toBeNull();
     expect(parsePairLink('garbage')).toBeNull();
+  });
+});
+
+describe('parsePairLink hardening', () => {
+  const base = (api: string) => `paperbrew://pair?code=K7P29QXM&api=${encodeURIComponent(api)}`;
+  it('rejects userinfo in api', () => {
+    expect(parsePairLink(base('https://x@paperbrew.app'))).toBeNull();
+    expect(parsePairLink(base('http://localhost@evil.com'))).toBeNull();
+  });
+  it('rejects lookalike and non-localhost http hosts', () => {
+    expect(parsePairLink(base('http://localhost.evil.com'))).toBeNull();
+    expect(parsePairLink(base('http://127.0.0.1:8787'))).toBeNull();
+  });
+  it('rejects an uppercase scheme+host and extra path', () => {
+    expect(parsePairLink('PAPERBREW://PAIR?code=K7P29QXM&api=https%3A%2F%2Fpaperbrew.app')).toBeNull();
+    expect(parsePairLink('paperbrew://pair/x?code=K7P29QXM&api=https%3A%2F%2Fpaperbrew.app')).toBeNull();
+  });
+  it('rejects codes with two dashes or 9 characters', () => {
+    expect(parsePairLink('paperbrew://pair?code=K7P2-9Q-XM&api=https%3A%2F%2Fpaperbrew.app')).toBeNull();
+    expect(parsePairLink('paperbrew://pair?code=K7P29QXMK&api=https%3A%2F%2Fpaperbrew.app')).toBeNull();
+  });
+  it('uses the first api param when duplicated', () => {
+    const u = 'paperbrew://pair?code=K7P29QXM&api=https%3A%2F%2Fpaperbrew.app&api=http%3A%2F%2Fevil.com';
+    expect(parsePairLink(u)?.api).toBe('https://paperbrew.app');
+    const v = 'paperbrew://pair?code=K7P29QXM&api=http%3A%2F%2Fevil.com&api=https%3A%2F%2Fpaperbrew.app';
+    expect(parsePairLink(v)).toBeNull();
   });
 });
 
