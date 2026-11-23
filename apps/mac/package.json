@@ -8,13 +8,13 @@
   "scripts": {
     "build": "tsc && cp src/paste.html src/paste.js dist/ && node scripts/write-defaults.js",
     "start": "npm run build && electron .",
-    "dist": "node scripts/require-api-url.js && npm run build && electron-builder --mac --universal",
+    "dist": "node scripts/dist.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
-    "electron": "^45.4.1",
+    "electron": "45.4.1",
     "electron-builder": "^26.18.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"

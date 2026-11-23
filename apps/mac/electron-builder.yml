@@ -1,0 +1,28 @@
+appId: app.paperbrew.mac
+productName: Paperbrew
+directories:
+  output: release
+# package.json is always included. dist/ is the compiled app (main.js, preload.js, paste.html, paste.js,
+# defaults.json); assets/ holds the tray icons, which main.js loads at runtime from ../assets.
+files:
+  - dist/**
+  - assets/**
+  - "!dist/**/*.map"
+protocols:
+  - name: Paperbrew
+    schemes:
+      - paperbrew
+mac:
+  category: public.app-category.productivity
+  icon: assets/icon.icns
+  target:
+    - target: dmg
+      arch:
+        - universal
+  extendInfo:
+    LSUIElement: true
+  # Signing: scripts/dist.js ad-hoc signs unless CSC_NAME (a "Developer ID Application" identity) is set.
+  notarize: false
+dmg:
+  title: Paperbrew ${version}
+  artifactName: Paperbrew-${version}-universal.dmg
