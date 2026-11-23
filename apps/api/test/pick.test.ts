@@ -68,6 +68,23 @@ describe('planIssue', () => {
     });
   });
 
+  it('skips a left-out candidate that has already rolled over twice', () => {
+    const candidates: Candidate[] = [
+      { id: 'big', readingMinutes: 100, rolloverCount: 0 },
+      { id: 'stale', readingMinutes: 5, rolloverCount: 2 },
+    ];
+    expect(planIssue(candidates, 60)).toEqual({ picked: ['big'], rolledOver: [], skipped: ['stale'] });
+  });
+
+  it('skips a candidate beyond the 50 cap when it has already rolled over once', () => {
+    const candidates = cands(Array(51).fill(1));
+    candidates[50] = { ...candidates[50], rolloverCount: 1 };
+    const plan = planIssue(candidates, 1000);
+    expect(plan.picked).toHaveLength(50);
+    expect(plan.rolledOver).toEqual([]);
+    expect(plan.skipped).toEqual(['a51']);
+  });
+
   it('returns empty lists for no candidates', () => {
     expect(planIssue([], 60)).toEqual({ picked: [], rolledOver: [], skipped: [] });
   });

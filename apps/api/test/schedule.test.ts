@@ -66,17 +66,50 @@ describe('isBrewDue', () => {
     expect(isBrewDue(sun1, now, at('2026-03-29T03:30'))).toBe(false);
   });
 
-  it('fires once when the hour is changed inside the window', () => {
-    // 2026-06-10 is a Wednesday. Brewed yesterday; schedule changed to an hour 3 h ago.
-    const now = at('2026-06-10T10:30');
-    const changed: Schedule = { days: [3], hour: 7, timezone: London };
-    const yesterday = at('2026-06-09T07:05');
-    expect(isBrewDue(changed, yesterday, now)).toBe(true);
-    expect(isBrewDue(changed, now, at('2026-06-10T10:35'))).toBe(false);
+  it('fires once after the hour is moved later than the last brew', () => {
+    // Saturday 2026-06-13. Brewed 07:05 under hour 7; the hour is changed to 9 and it is now 10:00.
+    const changed: Schedule = { days: [6], hour: 9, timezone: London };
+    const brewed = at('2026-06-13T07:05');
+    const now = at('2026-06-13T10:00');
+    expect(isBrewDue(changed, brewed, now)).toBe(true);
+    expect(isBrewDue(changed, now, at('2026-06-13T10:05'))).toBe(false);
+  });
+
+  it('does not fire when the hour is moved earlier than the last brew', () => {
+    const changed: Schedule = { days: [6], hour: 6, timezone: London };
+    expect(isBrewDue(changed, at('2026-06-13T07:05'), at('2026-06-13T10:00'))).toBe(false);
+  });
+
+  it('fires once when the zone moves to one whose slot is open and not yet brewed (London -> New York)', () => {
+    // Brewed 07:05 London (06:05Z). New York 07:00 EDT is 11:00Z, so at 12:00Z that slot is an hour old.
+    const ny: Schedule = { days: [6], hour: 7, timezone: 'America/New_York' };
+    const brewed = at('2026-06-13T07:05');
+    const now = new Date('2026-06-13T12:00:00Z');
+    expect(isBrewDue(ny, brewed, now)).toBe(true);
+    expect(isBrewDue(ny, now, new Date('2026-06-13T12:05:00Z'))).toBe(false);
+  });
+
+  it('does not fire when the zone moves to one whose slot has already passed the last brew (London -> Tokyo)', () => {
+    // Tokyo 14:00 JST Saturday is 05:00Z: inside the window at 06:30Z, but before the 06:05Z brew.
+    const tokyo: Schedule = { days: [6], hour: 14, timezone: 'Asia/Tokyo' };
+    expect(isBrewDue(tokyo, at('2026-06-13T07:05'), new Date('2026-06-13T06:30:00Z'))).toBe(false);
   });
 });
 
 describe('latestSlot', () => {
+  it('returns one slot for both passes of the repeated hour on the London DST end day', () => {
+    const sun1: Schedule = { days: [0], hour: 1, timezone: London };
+    expect(latestSlot(sun1, new Date('2026-10-25T00:05:00Z'))!.toISOString()).toBe('2026-10-25T00:00:00.000Z');
+    expect(latestSlot(sun1, new Date('2026-10-25T01:05:00Z'))!.toISOString()).toBe('2026-10-25T00:00:00.000Z');
+  });
+
+  it('returns one slot for both passes of the repeated hour on the New York DST end day', () => {
+    const sun1: Schedule = { days: [0], hour: 1, timezone: 'America/New_York' };
+    // 2026-11-01: 01:00-02:00 happens twice; the first is 01:00 EDT = 05:00Z.
+    expect(latestSlot(sun1, new Date('2026-11-01T05:05:00Z'))!.toISOString()).toBe('2026-11-01T05:00:00.000Z');
+    expect(latestSlot(sun1, new Date('2026-11-01T06:05:00Z'))!.toISOString()).toBe('2026-11-01T05:00:00.000Z');
+  });
+
   it('returns null with no days', () => {
     expect(latestSlot({ ...sat7, days: [] }, at('2026-06-13T09:00'))).toBeNull();
   });
