@@ -41,6 +41,9 @@ const BUDGETS = [
   { value: 90, hint: 'A slow afternoon.' },
 ];
 
+const WEEKDAYS = [1, 2, 3, 4, 5];
+const EVERY_DAY = [1, 2, 3, 4, 5, 6, 0];
+
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 
 const SAVE_ERROR = 'Could not save your schedule.';
@@ -77,6 +80,17 @@ function formatNext(iso: string, timeZone: string): string {
     return date.toLocaleString();
   }
 }
+
+/** "14:05", the time now in the zone, to check the zone at a glance. */
+function nowIn(timeZone: string): string | null {
+  try {
+    return new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone }).format(new Date());
+  } catch {
+    return null;
+  }
+}
+
+const sameDays = (a: number[], b: number[]) => a.length === b.length && b.every((d) => a.includes(d));
 
 export function ScheduleSection({ step, onStatus }: { step?: number; onStatus?: (s: SectionStatus) => void }) {
   const [schedule, setSchedule] = useState<Schedule | null>(null);
@@ -174,88 +188,121 @@ export function ScheduleSection({ step, onStatus }: { step?: number; onStatus?: 
   else if (!schedule) body = <p className="muted">Loading…</p>;
   else {
     let next = 'No issue scheduled';
-    if (schedule.enabled && schedule.days.length === 0) next = 'Pick at least one day.';
-    else if (schedule.enabled && schedule.brewDue) next = 'Next issue: within the hour';
-    else if (schedule.enabled && schedule.nextBrewAt) next = `Next issue: ${formatNext(schedule.nextBrewAt, schedule.timezone)}`;
+    if (schedule.enabled && schedule.days.length === 0) next = 'Pick at least one day';
+    else if (schedule.enabled && schedule.brewDue) next = 'Within the hour';
+    else if (schedule.enabled && schedule.nextBrewAt) next = formatNext(schedule.nextBrewAt, schedule.timezone);
+    const zoneNow = nowIn(schedule.timezone);
     body = (
       <div className="schedule-controls" aria-busy={saving}>
-        <label className="choice">
-          <input type="checkbox" role="switch" checked={schedule.enabled} onChange={(e) => void save({ brewEnabled: e.target.checked })} />
-          <span className="choice-text">
-            <span className="choice-label">Brew automatically</span>
-            <span className="choice-hint">Paperbrew puts an issue together for you on the days below.</span>
+        <label className="switch-row">
+          <span className="switch-text">
+            <span className="switch-label">Make my paper automatically</span>
+            <span className="group-hint">Paperbrew puts an issue together on the days you pick.</span>
           </span>
+          <input className="switch" type="checkbox" role="switch" checked={schedule.enabled} onChange={(e) => void save({ brewEnabled: e.target.checked })} />
         </label>
 
-        <div className="field" role="group" aria-labelledby="schedule-days">
-          <span className="field-label" id="schedule-days">
-            Days
-          </span>
-          <div className="day-chips">
-            {DAYS.map((day) => (
-              <button
-                key={day.value}
-                type="button"
-                className="day-chip"
-                aria-pressed={schedule.days.includes(day.value)}
-                aria-label={day.long}
-                onClick={() => toggleDay(day.value)}
-              >
-                {day.short}
-              </button>
-            ))}
+        {schedule.enabled && (
+          <div className="schedule-groups">
+            <div className="card-group" role="group" aria-labelledby="schedule-days">
+              <div className="group-head">
+                <h3 className="group-title" id="schedule-days">
+                  Which days
+                </h3>
+                <div className="quick-picks">
+                  <button
+                    type="button"
+                    className="btn-quiet"
+                    aria-pressed={sameDays(schedule.days, WEEKDAYS)}
+                    onClick={() => void save({ brewDays: WEEKDAYS })}
+                  >
+                    Weekdays
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-quiet"
+                    aria-pressed={sameDays(schedule.days, EVERY_DAY)}
+                    onClick={() => void save({ brewDays: EVERY_DAY })}
+                  >
+                    Every day
+                  </button>
+                </div>
+              </div>
+              <div className="day-chips">
+                {DAYS.map((day) => (
+                  <button
+                    key={day.value}
+                    type="button"
+                    className="day-chip"
+                    aria-pressed={schedule.days.includes(day.value)}
+                    aria-label={day.long}
+                    onClick={() => toggleDay(day.value)}
+                  >
+                    {day.short}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="card-group" role="group" aria-labelledby="schedule-time">
+              <h3 className="group-title" id="schedule-time">
+                What time
+              </h3>
+              <div className="field-row">
+                <label className="field" htmlFor="schedule-hour">
+                  <span className="field-name">Time</span>
+                  <select id="schedule-hour" value={schedule.hour} onChange={(e) => void save({ brewHour: Number(e.target.value) })}>
+                    {HOURS.map((h) => (
+                      <option key={h} value={h}>
+                        {pad(h)}:00
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field" htmlFor="schedule-zone">
+                  <span className="field-name">Time zone</span>
+                  <select id="schedule-zone" value={schedule.timezone} onChange={(e) => void save({ brewTimezone: e.target.value })}>
+                    {zones.map((zone) => (
+                      <option key={zone} value={zone}>
+                        {zone.replaceAll('_', ' ')}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {zoneNow && <p className="group-hint">It's {zoneNow} there now.</p>}
+            </div>
+
+            <div className="card-group">
+              <fieldset className="budget-group">
+                <legend className="group-title">How much to read</legend>
+                <div className="budget-choices">
+                  {BUDGETS.map((option) => (
+                    <label key={option.value} className="budget-choice">
+                      <input
+                        className="paper-radio"
+                        type="radio"
+                        name="brew-budget"
+                        value={option.value}
+                        checked={schedule.budgetMinutes === option.value}
+                        onChange={() => void save({ brewBudgetMinutes: option.value })}
+                      />
+                      <span className="budget-minutes">{option.value} min</span>
+                      <span className="budget-hint">{option.hint}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
           </div>
+        )}
+
+        <div className={schedule.enabled ? 'next-paper' : 'visually-hidden'}>
+          <span className="next-paper-label">Your next paper</span>
+          <p className={schedule.enabled && schedule.days.length === 0 ? 'next-paper-when is-todo' : 'next-paper-when'} role="status">
+            {next}
+          </p>
         </div>
-
-        <div className="field-row">
-          <div className="field">
-            <label className="field-label" htmlFor="schedule-hour">
-              Time
-            </label>
-            <select id="schedule-hour" value={schedule.hour} onChange={(e) => void save({ brewHour: Number(e.target.value) })}>
-              {HOURS.map((h) => (
-                <option key={h} value={h}>
-                  {pad(h)}:00
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label className="field-label" htmlFor="schedule-zone">
-              Time zone
-            </label>
-            <select id="schedule-zone" value={schedule.timezone} onChange={(e) => void save({ brewTimezone: e.target.value })}>
-              {zones.map((zone) => (
-                <option key={zone} value={zone}>
-                  {zone.replaceAll('_', ' ')}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <fieldset className="field choices">
-          <legend className="field-label">Reading time</legend>
-          {BUDGETS.map((option) => (
-            <label key={option.value} className="choice">
-              <input
-                type="radio"
-                name="brew-budget"
-                value={option.value}
-                checked={schedule.budgetMinutes === option.value}
-                onChange={() => void save({ brewBudgetMinutes: option.value })}
-              />
-              <span className="choice-text">
-                <span className="choice-label">{option.value} min</span>
-                <span className="choice-hint">{option.hint}</span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
-
-        <p className="schedule-next" role="status">
-          {next}
-        </p>
         {error && (
           <p className="error" role="alert">
             {error}

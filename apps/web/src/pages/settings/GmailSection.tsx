@@ -13,12 +13,50 @@ type GmailState =
 
 const CONNECT_URL = '/api/gmail/connect';
 
+// Rule codes from apps/api/src/gmail/rules.ts, in plain words.
 const REASONS: Record<string, string> = {
   'not-a-list': 'Not a mailing list',
-  'blocked-sender': 'Sender blocked',
-  'too-short': 'Too short',
+  'blocked-sender': 'You asked to skip this sender',
+  'too-short': 'Too short to print',
   'mostly-links': 'Mostly links',
+  error: "Couldn't read this one",
+  'rules-only (non-English)': 'Not in English, so we kept it',
 };
+
+// The classifier's reason is "<label> <score>" (apps/api/src/gmail/classify.ts); the score stays out of sight.
+const LABEL_REASONS: Record<string, string> = {
+  promotion: 'Looks like a promotion',
+  update: 'Looks like a product update',
+  notification: 'Looks like a receipt or alert',
+  links: 'Mostly links',
+};
+
+/** A plain-words reason, or the raw code when it is one we don't know. */
+export function reasonText(reason: string, kept: boolean): string {
+  if (Object.hasOwn(REASONS, reason)) return REASONS[reason];
+  const match = /^([a-z-]+) \d+(\.\d+)?$/.exec(reason);
+  if (!match) return reason;
+  const label = match[1];
+  if (label === 'editorial') return kept ? 'Reads like an article' : 'Not clearly an article';
+  return LABEL_REASONS[label] ?? reason;
+}
+
+/** "Stratechery <ben@stratechery.com>" reads as "Stratechery"; a bare address stays as it is. */
+function senderName(from: string): string {
+  const match = /^\s*"?([^"<]*?)"?\s*<[^>]+>\s*$/.exec(from);
+  return match && match[1] ? match[1] : from;
+}
+
+const SHORT_LIST = 5;
+
+function MailGlyph() {
+  return (
+    <svg width="18" height="14" viewBox="0 0 18 14" aria-hidden="true">
+      <rect x="1" y="1" width="16" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M1.8 2l7.2 5.6L16.2 2" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 /** "5 minutes ago", "yesterday", "just now". */
 export function relativeTime(iso: string): string {
@@ -37,6 +75,7 @@ export function GmailSection({ step, onStatus }: { step?: number; onStatus?: (s:
   const [loadError, setLoadError] = useState('');
   const [disconnecting, setDisconnecting] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,66 +127,86 @@ export function GmailSection({ step, onStatus }: { step?: number; onStatus?: (s:
   else if (!state) body = <p className="muted">Loading…</p>;
   else if (!state.connected)
     body = (
-      <>
-        <p>Paperbrew reads your newsletters and saves the long, editorial ones as articles. Read-only; you can disconnect any time.</p>
-        <p>
-          <a className="btn btn-primary" href={CONNECT_URL}>
-            Connect Gmail
-          </a>
-        </p>
-      </>
+      <div className="card-start">
+        <p className="card-lead">Paperbrew only reads. It never sends, changes or deletes your email, and you can disconnect any time.</p>
+        <a className="btn btn-primary card-action" href={CONNECT_URL}>
+          Connect Gmail
+        </a>
+      </div>
     );
-  else
+  else {
+    const rows = showAll ? state.recent : state.recent.slice(0, SHORT_LIST);
+    const hidden = state.recent.length - SHORT_LIST;
     body = (
       <>
-        <div className="gmail-account">
-          <div className="gmail-who">
-            <span className="gmail-address">{state.email}</span>
-            <span className="muted">
-              {state.lastSyncedAt ? `Last checked ${relativeTime(state.lastSyncedAt)}` : 'Not checked yet'}
+        <div className="card-group">
+          <div className="account-row">
+            <span className="account-glyph" aria-hidden="true">
+              <MailGlyph />
             </span>
+            <div className="account-who">
+              <span className="account-name">{state.email}</span>
+              <span className="muted">{state.lastSyncedAt ? `Checked ${relativeTime(state.lastSyncedAt)}` : 'Not checked yet'}</span>
+            </div>
+            <button type="button" className="card-action" onClick={() => void disconnect()} disabled={disconnecting}>
+              {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+            </button>
           </div>
-          <button type="button" onClick={() => void disconnect()} disabled={disconnecting}>
-            {disconnecting ? 'Disconnecting…' : 'Disconnect'}
-          </button>
+          {actionError && (
+            <p className="error" role="alert">
+              {actionError}
+            </p>
+          )}
+          {state.status === 'needs_reconnect' && (
+            <div className="card-alert">
+              <p className="card-alert-title">Google asked us to sign in again</p>
+              <p>Until you do, Paperbrew can't check your newsletters. It only takes a moment.</p>
+              <a className="btn btn-primary card-action" href={CONNECT_URL}>
+                Reconnect Gmail
+              </a>
+            </div>
+          )}
         </div>
-        {actionError && (
-          <p className="error" role="alert">
-            {actionError}
-          </p>
-        )}
-        {state.status === 'needs_reconnect' && (
-          <div className="warning">
-            <span>Paperbrew lost access to your Gmail.</span>
-            <a className="btn" href={CONNECT_URL}>
-              Reconnect Gmail
-            </a>
-          </div>
-        )}
-        <h3>Recent decisions</h3>
-        {state.recent.length === 0 ? (
-          <p className="muted">Nothing checked yet. New newsletters show up here within the hour.</p>
-        ) : (
-          <ul className="decisions">
-            {state.recent.map((row, i) => {
-              const kept = row.decision === 'editorial';
-              return (
-                <li key={i} className="decision">
-                  <span className={kept ? 'badge badge-kept' : 'badge'}>{kept ? 'Kept' : 'Skipped'}</span>
-                  <div className="decision-body">
-                    <span className="decision-subject" dir="auto">
-                      {row.subject || '(no subject)'}
-                    </span>
-                    <span className="decision-from muted">{row.from}</span>
-                    {row.reason && <span className="decision-reason muted">{REASONS[row.reason] ?? row.reason}</span>}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        <div className="card-group">
+          <h3 className="group-title">What Paperbrew found lately</h3>
+          {state.recent.length === 0 ? (
+            <p className="muted">Nothing checked yet. New newsletters show up here within the hour.</p>
+          ) : (
+            <>
+              <ul className="found-list" id="gmail-found">
+                {rows.map((row, i) => {
+                  const kept = row.decision === 'editorial';
+                  const meta = [row.from && senderName(row.from), row.reason && reasonText(row.reason, kept)].filter(Boolean);
+                  return (
+                    <li key={i} className="found-row">
+                      <span className="found-subject" dir="auto">
+                        {row.subject || '(no subject)'}
+                      </span>
+                      <span className={kept ? 'tag tag-ink' : 'tag'}>{kept ? 'Saved' : 'Skipped'}</span>
+                      {meta.length > 0 && (
+                        <span className="found-meta muted" title={row.from ?? undefined}>
+                          {meta.map((part, j) => (
+                            <span key={j} dir="auto">
+                              {part}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+              {hidden > 0 && (
+                <button type="button" className="btn-quiet card-more" aria-expanded={showAll} aria-controls="gmail-found" onClick={() => setShowAll((v) => !v)}>
+                  {showAll ? 'Show fewer' : `Show ${hidden} more`}
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </>
     );
+  }
 
   return (
     <SettingsCard
