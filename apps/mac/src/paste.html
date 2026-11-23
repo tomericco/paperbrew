@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'">
+<title>Paste code</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 13px -apple-system, system-ui, sans-serif; margin: 0; padding: 20px; }
+  h1 { font-size: 15px; margin: 0 0 6px; }
+  p { margin: 0 0 14px; opacity: .75; line-height: 1.4; }
+  input { width: 100%; box-sizing: border-box; font: 600 20px ui-monospace, Menlo, monospace; letter-spacing: .15em;
+          text-transform: uppercase; text-align: center; padding: 8px; }
+  button { margin-top: 12px; font-size: 13px; padding: 6px 14px; }
+  #msg { margin-top: 10px; min-height: 1.4em; color: #c0392b; }
+</style>
+</head>
+<body>
+<h1>Connect this Mac</h1>
+<p>In Paperbrew settings, choose Connect this Mac, then paste the code shown there.</p>
+<form id="f">
+  <input id="code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" autofocus>
+  <button type="submit">Connect</button>
+</form>
+<div id="msg" role="status"></div>
+<script src="paste.js"></script>
+</body>
+</html>

@@ -1,6 +1,12 @@
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const CODE_RE = new RegExp(`^[${CODE_ALPHABET}]{8}$`);
 
+/** Normalizes a pairing code typed or pasted by a person: uppercase, one dash removed. Null if it is not a valid code. */
+export function normalizeCode(raw: string): string | null {
+  const code = raw.trim().toUpperCase().replace('-', '');
+  return CODE_RE.test(code) ? code : null;
+}
+
 export type PairLink = { code: string; api: string };
 
 /**
@@ -22,8 +28,8 @@ export function parsePairLink(link: string): PairLink | null {
   const rawApi = u.searchParams.get('api');
   if (!rawCode || !rawApi) return null;
 
-  const code = rawCode.trim().toUpperCase().replace('-', '');
-  if (!CODE_RE.test(code)) return null;
+  const code = normalizeCode(rawCode);
+  if (!code) return null;
 
   let api: URL;
   try {
