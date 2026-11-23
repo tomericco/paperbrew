@@ -26,6 +26,7 @@ const USER = {
 
 let user: typeof USER | undefined;
 let candidates: { id: string; reading_minutes: number | null; rollover_count: number }[];
+let hasDevice: boolean;
 
 const sqlOf = (call: unknown[]) => String(call[0]).replace(/\s+/g, ' ').trim();
 const calls = (re: RegExp) => clientQuery.mock.calls.filter((c) => re.test(sqlOf(c)));
@@ -35,9 +36,11 @@ beforeEach(() => {
   release.mockReset();
   user = { ...USER };
   candidates = [];
+  hasDevice = true;
   clientQuery.mockImplementation(async (sql: string) => {
     const s = sql.replace(/\s+/g, ' ');
     if (/from users where id = \$1 for update/.test(s)) return { rows: user ? [user] : [], rowCount: user ? 1 : 0 };
+    if (/from print_devices/.test(s)) return { rows: [{ has_device: hasDevice }], rowCount: 1 };
     if (/from articles a/.test(s)) return { rows: candidates, rowCount: candidates.length };
     if (/insert into issues/.test(s)) return { rows: [{ id: 'issue-1' }], rowCount: 1 };
     return { rows: [], rowCount: 0 };
@@ -72,6 +75,31 @@ describe('createIssue', () => {
     expect(calls(/from articles a/)).toHaveLength(0);
     expect(calls(/update users set last_brew_at/)).toHaveLength(0);
     expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it('a due user with no active print device gets nothing: no issue, no article change, last_brew_at kept, committed', async () => {
+    candidates = three();
+    hasDevice = false;
+    expect(await createIssue('u1', NOW)).toEqual({ issueId: null });
+
+    const check = calls(/from print_devices/);
+    expect(check).toHaveLength(1);
+    expect(sqlOf(check[0])).toContain('d.user_id = $1');
+    expect(sqlOf(check[0])).toContain('d.revoked_at is null');
+    expect(check[0][1]).toEqual(['u1']);
+    expect(calls(/from articles a/)).toHaveLength(0);
+    expect(calls(/insert into issues/)).toHaveLength(0);
+    expect(calls(/update articles/)).toHaveLength(0);
+    expect(calls(/update users set last_brew_at/)).toHaveLength(0);
+    expect(sqlOf(clientQuery.mock.calls.at(-1)!)).toBe('commit');
+    expect(calls(/^rollback$/)).toHaveLength(0);
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not look for a device when no brew is due', async () => {
+    user!.last_brew_at = new Date('2026-11-23T07:05:00Z');
+    await createIssue('u1', NOW);
+    expect(calls(/from print_devices/)).toHaveLength(0);
   });
 
   it('a disabled user gets nothing', async () => {
@@ -152,6 +180,7 @@ describe('createIssue', () => {
     clientQuery.mockImplementation(async (sql: string) => {
       const s = sql.replace(/\s+/g, ' ');
       if (/for update/.test(s)) return { rows: [user], rowCount: 1 };
+      if (/from print_devices/.test(s)) return { rows: [{ has_device: true }], rowCount: 1 };
       if (/from articles a/.test(s)) return { rows: candidates, rowCount: 3 };
       if (/insert into issues/.test(s)) throw new Error('boom');
       return { rows: [], rowCount: 0 };
@@ -167,6 +196,7 @@ describe('createIssue', () => {
     clientQuery.mockImplementation(async (sql: string) => {
       const s = sql.replace(/\s+/g, ' ');
       if (/for update/.test(s)) return { rows: [user], rowCount: 1 };
+      if (/from print_devices/.test(s)) return { rows: [{ has_device: true }], rowCount: 1 };
       if (/from articles a/.test(s)) return { rows: candidates, rowCount: 3 };
       if (/insert into issues/.test(s)) throw new Error('boom');
       if (s === 'rollback') throw new Error('connection lost');
@@ -182,6 +212,7 @@ describe('createIssue', () => {
     clientQuery.mockImplementation(async (sql: string) => {
       const s = sql.replace(/\s+/g, ' ');
       if (/for update/.test(s)) return { rows: [user], rowCount: 1 };
+      if (/from print_devices/.test(s)) return { rows: [{ has_device: true }], rowCount: 1 };
       if (/from articles a/.test(s)) return { rows: candidates, rowCount: 3 };
       if (/insert into issues/.test(s)) throw new Error('boom');
       return { rows: [], rowCount: 0 };

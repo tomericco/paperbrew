@@ -24,7 +24,7 @@ const CANDIDATES_SQL = `
   order by a.created_at asc`;
 
 /**
- * Queue an issue for the user if a brew slot is due. One transaction; the row lock on the user makes
+ * Queue an issue for the user if a brew slot is due and they have a paired Mac. One transaction; the row lock on the user makes
  * a double tick or a retry a no-op, because the first run moves last_brew_at past the slot.
  */
 export async function createIssue(userId: string, now: Date = new Date()): Promise<{ issueId: string | null }> {
@@ -40,6 +40,19 @@ export async function createIssue(userId: string, now: Date = new Date()): Promi
     const u = users[0];
     const schedule = u && { days: u.brew_days, hour: u.brew_hour, timezone: u.brew_timezone };
     if (!u || !u.brew_enabled || !schedule || !isBrewDue(schedule, u.last_brew_at, now)) {
+      await client.query('commit');
+      return { issueId: null };
+    }
+
+    // Nothing can print without a paired Mac. Leave articles and last_brew_at alone, so pairing within the
+    // brew window still brews this slot on the next tick.
+    const { rows: device } = await client.query<{ has_device: boolean }>(
+      `select exists (
+         select 1 from print_devices d where d.user_id = $1 and d.revoked_at is null
+       ) as has_device`,
+      [userId],
+    );
+    if (!device[0]?.has_device) {
       await client.query('commit');
       return { issueId: null };
     }

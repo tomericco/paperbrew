@@ -35,7 +35,7 @@ export async function tick(
   // Scheduled issues stay off until the print agent exists (AUTOBREW_ENABLED), so nothing piles up queued.
   if (!config.AUTOBREW_ENABLED) return { gmail: rowCount ?? 0, brews: 0, stale };
 
-  // One create_issue per enabled user whose slot is open, unless one is already waiting or running.
+  // One create_issue per enabled user with a paired Mac whose slot is open, unless one is already waiting or running.
   // Whether the slot is open is decided here in JS; createIssue re-checks it under a row lock.
   const { rows: users } = await db.query<{
     id: string;
@@ -47,6 +47,9 @@ export async function tick(
     `select u.id, u.brew_days, u.brew_hour, u.brew_timezone, u.last_brew_at
      from users u
      where u.brew_enabled
+       and exists (
+         select 1 from print_devices d where d.user_id = u.id and d.revoked_at is null
+       )
        and not exists (
          select 1 from jobs j
          where j.type = 'create_issue' and j.done_at is null and j.payload->>'id' = u.id::text
