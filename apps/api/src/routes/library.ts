@@ -9,7 +9,7 @@ import { isUniqueViolation, pool } from '../db/client.js';
 import { gmailAvailable } from '../gmail/available.js';
 import { senderEmail } from '../gmail/rules.js';
 import { formatAddress, normalizeToken } from '../inbound/address.js';
-import { nextBrewAt } from '../schedule/schedule.js';
+import { isBrewDue, nextBrewAt } from '../schedule/schedule.js';
 
 /** Hono env for routes behind `requireUser`: `c.get('userId')` is our `users.id`. */
 export type UserEnv = { Variables: { userId: string } };
@@ -188,15 +188,17 @@ library.put('/me/settings', async (c) => {
 });
 
 library.get('/me/schedule', async (c) => {
-  const { rows } = await pool.query<Omit<SettingsRow, 'paper_layout'>>(
-    'select brew_enabled, brew_days, brew_hour, brew_timezone, brew_budget_minutes from users where id = $1',
+  const { rows } = await pool.query<Omit<SettingsRow, 'paper_layout'> & { last_brew_at: Date | null }>(
+    'select brew_enabled, brew_days, brew_hour, brew_timezone, brew_budget_minutes, last_brew_at from users where id = $1',
     [c.get('userId')],
   );
   const row = rows[0];
   if (!row) return c.json({ error: 'not found' }, 404);
-  const next = row.brew_enabled
-    ? nextBrewAt({ days: row.brew_days, hour: row.brew_hour, timezone: row.brew_timezone }, new Date())
-    : null;
+  const schedule = { days: row.brew_days, hour: row.brew_hour, timezone: row.brew_timezone };
+  const now = new Date();
+  const next = row.brew_enabled ? nextBrewAt(schedule, now) : null;
+  // An open slot the next tick will brew for, so the page does not say "next week" while one is about to fire.
+  const brewDue = row.brew_enabled && isBrewDue(schedule, row.last_brew_at ?? null, now);
   return c.json({
     enabled: row.brew_enabled,
     days: row.brew_days,
@@ -204,6 +206,7 @@ library.get('/me/schedule', async (c) => {
     timezone: row.brew_timezone,
     budgetMinutes: row.brew_budget_minutes,
     nextBrewAt: next ? next.toISOString() : null,
+    brewDue,
   });
 });
 

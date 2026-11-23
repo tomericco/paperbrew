@@ -258,6 +258,7 @@ describe('GET /me/schedule', () => {
       timezone: 'UTC',
       budgetMinutes: 90,
       nextBrewAt: '2026-11-29T07:00:00.000Z',
+      brewDue: false,
     });
     const select = query.mock.calls.find(([sql]) => /brew_enabled/.test(String(sql)))!;
     expect(select[1]).toEqual(['user-1']);
@@ -268,6 +269,52 @@ describe('GET /me/schedule', () => {
     const body = await (await app.request('/me/schedule', { headers: cookie })).json();
     expect(body.enabled).toBe(false);
     expect(body.nextBrewAt).toBeNull();
+  });
+
+  describe('brewDue', () => {
+    // Monday 2026-11-23 08:30 UTC; the Monday 07:00 UTC slot is open.
+    const monday = row({ brew_days: [1], last_brew_at: null });
+
+    it('is true when the slot is open and not yet brewed, while nextBrewAt stays next week', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-23T08:30:00Z'));
+      signedIn(monday);
+      const body = await (await app.request('/me/schedule', { headers: cookie })).json();
+      expect(body.brewDue).toBe(true);
+      expect(body.nextBrewAt).toBe('2026-11-30T07:00:00.000Z');
+    });
+
+    it('is false once this slot was brewed', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-23T08:30:00Z'));
+      signedIn({ ...monday, last_brew_at: new Date('2026-11-23T07:10:00Z') });
+      const body = await (await app.request('/me/schedule', { headers: cookie })).json();
+      expect(body.brewDue).toBe(false);
+    });
+
+    it('is false when the slot is older than the window', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-23T14:00:00Z'));
+      signedIn(monday);
+      const body = await (await app.request('/me/schedule', { headers: cookie })).json();
+      expect(body.brewDue).toBe(false);
+    });
+
+    it('is false when the schedule is disabled', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-11-23T08:30:00Z'));
+      signedIn({ ...monday, brew_enabled: false });
+      const body = await (await app.request('/me/schedule', { headers: cookie })).json();
+      expect(body.brewDue).toBe(false);
+      expect(body.nextBrewAt).toBeNull();
+    });
+
+    it('selects last_brew_at', async () => {
+      const query = signedIn(monday);
+      await app.request('/me/schedule', { headers: cookie });
+      const select = query.mock.calls.find(([sql]) => /brew_enabled/.test(String(sql)))!;
+      expect(String(select[0])).toContain('last_brew_at');
+    });
   });
 
   it('nextBrewAt is null when no days are chosen', async () => {

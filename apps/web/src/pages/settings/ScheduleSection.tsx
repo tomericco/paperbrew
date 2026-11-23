@@ -8,6 +8,8 @@ type Schedule = {
   timezone: string;
   budgetMinutes: number;
   nextBrewAt: string | null;
+  /** An open slot the next hourly tick will brew for. */
+  brewDue: boolean;
 };
 
 /** The fields a change can touch, named as the settings API names them. */
@@ -159,7 +161,10 @@ export function ScheduleSection() {
   if (loadError) body = <p className="error">{loadError}</p>;
   else if (!schedule) body = <p className="muted">Loading…</p>;
   else {
-    const next = schedule.enabled && schedule.nextBrewAt ? `Next issue: ${formatNext(schedule.nextBrewAt, schedule.timezone)}` : 'No issue scheduled';
+    let next = 'No issue scheduled';
+    if (schedule.enabled && schedule.days.length === 0) next = 'Pick at least one day.';
+    else if (schedule.enabled && schedule.brewDue) next = 'Next issue: within the hour';
+    else if (schedule.enabled && schedule.nextBrewAt) next = `Next issue: ${formatNext(schedule.nextBrewAt, schedule.timezone)}`;
     body = (
       <div className="schedule-controls" aria-busy={saving}>
         <label className="choice">
