@@ -165,6 +165,7 @@ describe('tick()', () => {
     expect(select).toContain('create_issue');
     expect(select).toContain('done_at is null');
     expect(select).toContain('not exists');
+    expect(select).toMatch(/exists \(\s*select 1 from print_devices d where d\.user_id = u\.id and d\.revoked_at is null\s*\)/);
     const ins = brewInserts(db);
     expect(ins).toHaveLength(1);
     expect(ins[0][1]).toEqual(['create_issue', { id: 'u-due' }]);
