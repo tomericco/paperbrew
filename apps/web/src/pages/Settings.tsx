@@ -92,7 +92,7 @@ function SettingsContent({ name }: { name: string }) {
           ) : (
             <>
               <PaperSection initial={me.paperLayout} />
-              <PrinterSection macAppUrl={me.macAppUrl} />
+              {me.macAppUrl && <PrinterSection macAppUrl={me.macAppUrl} />}
               {me.scheduleAvailable && <ScheduleSection />}
               {me.gmailAvailable && <GmailSection />}
             </>

@@ -37,7 +37,7 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-export function PrinterSection({ macAppUrl }: { macAppUrl: string | null }) {
+export function PrinterSection({ macAppUrl }: { macAppUrl: string }) {
   const [devices, setDevices] = useState<Device[] | null>(null);
   const [issues, setIssues] = useState<Issue[] | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -200,11 +200,9 @@ export function PrinterSection({ macAppUrl }: { macAppUrl: string | null }) {
           <>
             <p>Install the Paperbrew app on your Mac and your issues print on your printer by themselves.</p>
             <div className="printer-actions">
-              {macAppUrl && (
-                <a className="btn" href={macAppUrl}>
-                  Download for Mac
-                </a>
-              )}
+              <a className="btn" href={macAppUrl}>
+                Download for Mac
+              </a>
               <button type="button" className="btn-primary" onClick={() => void connect()} disabled={connecting}>
                 Connect this Mac
               </button>
