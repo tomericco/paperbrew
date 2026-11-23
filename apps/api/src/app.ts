@@ -130,7 +130,8 @@ app.get('/cron/run-jobs', async (c) => {
   return c.json({ ok: true, ran });
 });
 
-// Hourly (Supabase pg_cron, see README): queue a gmail_sync per active connection, then run what's due.
+// Hourly (Supabase pg_cron, see README): queue a gmail_sync per active connection and, when AUTOBREW_ENABLED,
+// a create_issue per user whose brew slot is open; then run what's due.
 app.get('/cron/tick', async (c) => {
   const secret = config.CRON_SECRET;
   if (!secret || c.req.header('authorization') !== `Bearer ${secret}`) return c.json({ ok: false }, 401);
