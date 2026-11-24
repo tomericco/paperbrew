@@ -2,11 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ComponentType } from 'react';
 import { authClient } from '../../auth';
 import { Layout } from '../../Layout';
+import { load } from './api';
 import { SkipContext } from './Card';
 import { DoneCard } from './DoneCard';
 import { FirstIssueCard } from './FirstIssueCard';
 import { GmailCard } from './GmailCard';
 import { LookCard } from './LookCard';
+import { PrinterCard } from './PrinterCard';
+import { ScheduleCard } from './ScheduleCard';
 import { readStoredStep, STEP_ORDER, storeStep } from './steps';
 import type { CardProps, Step } from './steps';
 import { Welcome } from './Welcome';
@@ -20,6 +23,8 @@ const CARDS: Partial<Record<Step, ComponentType<CardProps>>> = {
   gmail: GmailCard,
   look: LookCard,
   first: FirstIssueCard,
+  schedule: ScheduleCard,
+  printer: PrinterCard,
   done: DoneCard,
 };
 
@@ -59,18 +64,36 @@ function Flow() {
     setStep(to);
   }, []);
 
+  // Without a scheduler on the server the Schedule card has nothing to set, so it is passed over in both directions
+  // (Next from First issue lands on Printer, Back from Printer on First issue). Asked once; a failed
+  // request counts as available, since the card then says so itself. The dots still read "Step n of 5".
+  const scheduleAvailable = useRef<Promise<boolean> | undefined>(undefined);
+  const hasSchedule = useCallback(() => {
+    scheduleAvailable.current ??= load<{ scheduleAvailable: boolean }>('/api/me').then((me) => me?.scheduleAvailable !== false);
+    return scheduleAvailable.current;
+  }, []);
+
   const move = useCallback(
-    (from: Step, direction: 1 | -1) => {
+    async (from: Step, direction: 1 | -1) => {
       const at = STEP_ORDER.indexOf(from);
       for (let i = at + direction; i >= 0 && i < STEP_ORDER.length; i += direction) {
-        if (registered(STEP_ORDER[i])) return go(STEP_ORDER[i]);
+        const candidate = STEP_ORDER[i];
+        if (!registered(candidate)) continue;
+        if (candidate === 'schedule' && !(await hasSchedule())) continue;
+        return go(candidate);
       }
     },
-    [go],
+    [go, hasSchedule],
   );
 
-  const next = useCallback(() => move(step, 1), [move, step]);
-  const back = useCallback(() => move(step, -1), [move, step]);
+  // A reload on the Schedule card with no scheduler goes on to Printer.
+  useEffect(() => {
+    if (step === 'schedule') void hasSchedule().then((available) => available || go('printer'));
+    // Only the step the page opened on can be stale; later moves already skip it.
+  }, []);
+
+  const next = useCallback(() => void move(step, 1), [move, step]);
+  const back = useCallback(() => void move(step, -1), [move, step]);
   const skip = useCallback(() => go('done'), [go]);
 
   // A new card takes focus on its heading, so a keyboard or screen reader user lands on it.

@@ -1,17 +1,15 @@
 import { useEffect, useState } from 'react';
 import { shortDate } from '../article';
 import { errorText } from '../layouts';
+import { getJson, usePairing } from '../usePairing';
+import type { Device } from '../usePairing';
 import { relativeTime } from './GmailSection';
 import { SettingsCard, StatusPill, useReportStatus } from './SettingsCard';
 import type { SectionStatus } from './SettingsCard';
 
-type Device = { id: string; name: string; createdAt: string; lastSeenAt: string | null };
-
 type IssueStatus = 'queued' | 'printing' | 'printed' | 'failed';
 
 type Issue = { id: string; createdAt: string; status: IssueStatus; articleCount: number; printedAt: string | null; error: string | null };
-
-type Pairing = { code: string };
 
 const STATUS_LABELS: Record<IssueStatus, string> = {
   queued: 'Waiting',
@@ -27,22 +25,7 @@ const STATUS_TAGS: Record<IssueStatus, string> = {
   failed: 'tag tag-warn',
 };
 
-const POLL_MS = 2000;
-const GIVE_UP_MS = 10 * 60 * 1000;
-const HELP_AFTER_MS = 5000;
 const SEEN_RECENTLY_MS = 15 * 60 * 1000;
-
-const CONNECT_ERROR = "Couldn't start the connection. Try again.";
-
-async function getJson<T>(path: string): Promise<T | null> {
-  const res = await fetch(path);
-  if (res.status === 401) {
-    location.replace('/signin');
-    return null;
-  }
-  if (!res.ok) throw new Error();
-  return (await res.json()) as T;
-}
 
 /** "Today 7:00 AM", "Yesterday 7:00 AM", then "Nov 22, 7:00 AM" (with the year when it isn't this year). */
 export function friendlyDate(iso: string, now = new Date()): string {
@@ -75,17 +58,10 @@ export function PrinterSection({
   step?: number;
   onStatus?: (s: SectionStatus) => void;
 }) {
-  const [devices, setDevices] = useState<Device[] | null>(null);
   const [issues, setIssues] = useState<Issue[] | null>(null);
-  const [loadError, setLoadError] = useState('');
-  const [pairing, setPairing] = useState<Pairing | null>(null);
-  const [connecting, setConnecting] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
-  const [timedOut, setTimedOut] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [issuesLoadError, setIssuesLoadError] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [reprinting, setReprinting] = useState<string | null>(null);
-  const [error, setError] = useState('');
   const [issueNotes, setIssueNotes] = useState<Record<string, string>>({});
 
   async function refreshIssues() {
@@ -97,91 +73,23 @@ export function PrinterSection({
     }
   }
 
+  const { devices, setDevices, loadError: devicesLoadError, pairing, connecting, showHelp, timedOut, copied, error, setError, connect, copyCode } =
+    usePairing(() => void refreshIssues());
+  const loadError = devicesLoadError || issuesLoadError ? 'Could not load your printer.' : '';
+
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getJson<{ devices: Device[] }>('/api/me/print-devices'), getJson<{ issues: Issue[] }>('/api/me/issues')])
-      .then(([d, i]) => {
-        if (cancelled || !d || !i) return;
-        setDevices(d.devices);
-        setIssues(i.issues);
+    getJson<{ issues: Issue[] }>('/api/me/issues')
+      .then((body) => {
+        if (!cancelled && body) setIssues(body.issues);
       })
       .catch(() => {
-        if (!cancelled) setLoadError('Could not load your printer.');
+        if (!cancelled) setIssuesLoadError(true);
       });
     return () => {
       cancelled = true;
     };
   }, []);
-
-  // After Connect: ask for the device every 2 s until it shows up, for at most 10 minutes. Stops on unmount too.
-  useEffect(() => {
-    if (!pairing) return;
-    let stopped = false;
-    const started = Date.now();
-    const timer = setInterval(() => {
-      if (Date.now() - started > GIVE_UP_MS) {
-        clearInterval(timer);
-        setPairing(null);
-        setTimedOut(true);
-        return;
-      }
-      getJson<{ devices: Device[] }>('/api/me/print-devices')
-        .then((body) => {
-          if (stopped || !body || body.devices.length === 0) return;
-          clearInterval(timer);
-          setDevices(body.devices);
-          setPairing(null);
-          void refreshIssues();
-        })
-        .catch(() => {
-          // A missed poll is fine; the next one tries again.
-        });
-    }, POLL_MS);
-    const help = setTimeout(() => setShowHelp(true), HELP_AFTER_MS);
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-      clearTimeout(help);
-    };
-  }, [pairing]);
-
-  async function connect() {
-    if (connecting) return;
-    setConnecting(true);
-    setError('');
-    setTimedOut(false);
-    setShowHelp(false);
-    setCopied(false);
-    try {
-      const res = await fetch('/api/me/print-devices/pair-code', { method: 'POST' });
-      if (res.status === 401) {
-        location.replace('/signin');
-        return;
-      }
-      if (!res.ok) {
-        setError(await errorText(res, CONNECT_ERROR));
-        return;
-      }
-      const body = (await res.json()) as { code: string; link: string };
-      setPairing({ code: body.code });
-      // Hands over to the Paperbrew app when it is installed; otherwise nothing happens and the page says so.
-      location.href = body.link;
-    } catch {
-      setError(CONNECT_ERROR);
-    } finally {
-      setConnecting(false);
-    }
-  }
-
-  async function copyCode(code: string) {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setError('Could not copy. Select the code and copy it by hand.');
-    }
-  }
 
   async function removeDevice(device: Device) {
     if (!confirm(`Remove ${device.name}? It stops printing your issues. You can connect it again any time.`)) return;
@@ -221,7 +129,7 @@ export function PrinterSection({
   const fresh = !!device?.lastSeenAt && Date.now() - new Date(device.lastSeenAt).getTime() < SEEN_RECENTLY_MS;
   const status: SectionStatus | null = loadError
     ? { state: 'todo', tone: 'warn', label: "Couldn't load" }
-    : !devices
+    : !devices || !issues
       ? null
       : !device
         ? { state: 'todo', tone: 'off', label: 'Not set up' }

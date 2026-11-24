@@ -3161,3 +3161,206 @@ button:disabled {
     opacity: 0.35;
   }
 }
+
+/* Schedule and Printer cards. */
+
+.ob {
+  --ob-paper: #faf8f3;
+  --ob-paper-line: #e9e3d6;
+}
+
+.ob-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ob-center {
+  text-align: center;
+}
+
+.ob-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.ob-day {
+  min-height: 48px;
+  padding: 8px 0;
+  font-size: 15px;
+  border-color: #d9d2c4;
+  border-radius: 8px;
+  transition: background-color 140ms, border-color 140ms, color 140ms;
+}
+
+.ob-day[aria-pressed='true'] {
+  background: var(--ob-ink);
+  border-color: var(--ob-ink);
+  color: #fff;
+}
+
+@media (hover: hover) {
+  /* Keep the hover from looking like a picked day. */
+  .ob-day[aria-pressed='false']:hover:not(:disabled) {
+    background: var(--ob-paper);
+    border-color: var(--ob-ink);
+    color: var(--ob-ink);
+  }
+}
+
+.ob-select {
+  width: 100%;
+  max-width: 220px;
+  min-height: 44px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ob-ink);
+  background: #fff;
+  border: 1px solid #cfc8ba;
+  border-radius: 6px;
+}
+
+.ob-select:focus-visible,
+.ob-range:focus-visible {
+  outline: 2px solid var(--ob-ink);
+  outline-offset: 2px;
+}
+
+.ob-budget-value {
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ob-ink);
+}
+
+.ob-range {
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  accent-color: var(--ob-ink);
+}
+
+/* The four lengths under the slider, spread to line up with its stops. */
+.ob-range-ticks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: -10px;
+  padding-inline: 2px;
+}
+
+.ob-range-ticks span {
+  min-width: 2ch;
+  text-align: center;
+}
+
+.ob-callout {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 18px;
+  background: var(--ob-paper);
+  border: 1px solid var(--ob-ink);
+  border-radius: 6px;
+}
+
+.ob-big {
+  font-family: 'Fraunces', 'Source Serif 4', Georgia, serif;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.ob-big.is-todo {
+  font-size: 20px;
+  color: var(--ob-soft);
+}
+
+.ob-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* A link styled as the card's wide button. */
+a.ob-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.ob-wait {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ob-wait-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--ob-soft);
+}
+
+.ob-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  /* Centred on the first line of the text. */
+  margin-top: 9px;
+  border-radius: 50%;
+  background: var(--ob-ink);
+  animation: ob-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes ob-breathe {
+  50% {
+    opacity: 0.25;
+    transform: scale(0.75);
+  }
+}
+
+.ob-help {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--ob-paper);
+  border: 1px solid var(--ob-paper-line);
+  border-radius: 6px;
+  font-size: 15px;
+}
+
+/* No heading: the notice is one plain sentence. */
+.ob-notice {
+  padding: 14px 16px;
+  background: var(--ob-paper);
+  border: 1px solid var(--ob-paper-line);
+  border-left: 3px solid var(--ob-ink);
+  border-radius: 2px 6px 6px 2px;
+  font-size: 15px;
+}
+
+/* Seven chips across a phone card: close the gaps so each stays at least 40px wide. */
+@media (max-width: 520px) {
+  .ob-days {
+    gap: 3px;
+  }
+
+  .ob-day {
+    font-size: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-dot {
+    animation: none;
+  }
+
+  .ob-day {
+    transition: none;
+  }
+}
