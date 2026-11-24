@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent, ReactNode } from 'react';
 import { authClient } from '../auth';
 import { Layout } from '../Layout';
+import { AccountActions } from './desk/AccountActions';
 import { errorText, LAYOUTS } from './layouts';
 import type { PaperLayout } from './layouts';
 import { LOOK_FONTS, PAPER_LOOKS, toPaperLook } from './looks';
@@ -124,27 +125,10 @@ function SettingsContent({ name }: { name: string }) {
     [activate],
   );
 
-  async function signOut() {
-    await authClient.signOut();
-    location.assign('/');
-  }
-
-  const header = (
-    <>
-      <a className="btn" href="/app">
-        Library
-      </a>
-      <span className="who">{name}</span>
-      <button type="button" onClick={signOut}>
-        Sign out
-      </button>
-    </>
-  );
-
   const progress = steps.length >= 2 ? <Progress steps={steps} statuses={statuses} /> : null;
 
   return (
-    <Layout actions={header}>
+    <Layout nav="settings" actions={<AccountActions name={name} />}>
       <div className="grid">
         <div className="span-12 settings">
           <header className="settings-head" style={{ '--i': 0 } as CSSProperties}>

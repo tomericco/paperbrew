@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { formatWhen } from '../desk/format';
 import { PAPER_LOOKS } from '../looks';
 import { load } from './api';
 import { Card } from './Card';
@@ -17,17 +18,6 @@ const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONDAY_FIRST = [1, 2, 3, 4, 5, 6, 0];
 
 const hourLabel = (h: number) => `${h % 12 || 12}:00 ${h < 12 ? 'am' : 'pm'}`;
-
-function formatNext(iso: string, timeZone: string): string | null {
-  const date = new Date(iso);
-  try {
-    const day = date.toLocaleDateString(undefined, { weekday: 'long', timeZone });
-    const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZone });
-    return `${day} ${time}`;
-  } catch {
-    return null;
-  }
-}
 
 function scheduleText(s: Schedule): string {
   const days = MONDAY_FIRST.filter((d) => s.days.includes(d));
@@ -91,7 +81,7 @@ function summarize(d: Loaded): { rows: Row[]; tail: string } {
 
   let tail = 'You brew by hand whenever you like.';
   if (d.me?.scheduleAvailable !== false && scheduleOn && d.schedule) {
-    const next = d.schedule.nextBrewAt ? formatNext(d.schedule.nextBrewAt, d.schedule.timezone) : null;
+    const next = d.schedule.nextBrewAt ? formatWhen(d.schedule.nextBrewAt, d.schedule.timezone) : null;
     tail = mac
       ? next
         ? `Your first paper prints ${next}.`
@@ -133,7 +123,7 @@ export function DoneCard() {
       if (!res.ok) throw new Error();
       clearStoredStep();
       // Stay busy: the page is leaving.
-      location.assign('/app');
+      location.replace('/app');
     } catch {
       setError("Couldn't finish setup. Try again.");
       setBusy(false);

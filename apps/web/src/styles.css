@@ -131,10 +131,6 @@ button:disabled {
   min-width: 0;
 }
 
-.address-bar {
-  min-width: 0;
-}
-
 .header-actions .who {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -420,87 +416,6 @@ button:disabled {
   gap: var(--gutter);
 }
 
-.page-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-/* Split Brew button: two halves that read as one btn-primary, a hairline between them. */
-
-.split {
-  position: relative;
-  display: inline-flex;
-}
-
-.split-main {
-  border-radius: 4px 0 0 4px;
-}
-
-.split-caret {
-  border-radius: 0 4px 4px 0;
-  border-left-color: rgba(255, 255, 255, 0.35);
-  padding-left: 8px;
-  padding-right: 8px;
-}
-
-.menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 10;
-  width: 300px;
-  max-width: calc(100vw - 2 * var(--gutter));
-  padding: 4px;
-  display: grid;
-  gap: 2px;
-  background: #fff;
-  border: 1px solid #e6e6e6;
-  border-radius: 4px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
-}
-
-.menu-item {
-  display: grid;
-  gap: 2px;
-  justify-content: stretch;
-  padding: 8px 10px 8px 28px;
-  position: relative;
-  border-color: transparent;
-  text-align: left;
-  white-space: normal;
-}
-
-@media (hover: hover) {
-  .menu-item:hover:not(:disabled) {
-    background: transparent;
-    color: #111;
-    border-color: #111;
-  }
-}
-
-.menu-item[aria-checked='true']::before {
-  content: '';
-  position: absolute;
-  left: 11px;
-  top: 12px;
-  width: 4px;
-  height: 8px;
-  border: solid #111;
-  border-width: 0 1.5px 1.5px 0;
-  transform: rotate(45deg);
-}
-
-.menu-label {
-  font-weight: 600;
-}
-
-.menu-hint {
-  font-size: 13px;
-  color: #6b6b6b;
-}
-
 .row {
   display: flex;
   gap: 8px;
@@ -510,11 +425,6 @@ button:disabled {
 .input {
   flex: 1;
   min-width: 0;
-}
-
-.address {
-  min-width: 0;
-  word-break: break-all;
 }
 
 /* Article list: one bordered line per article */
@@ -562,43 +472,6 @@ button:disabled {
   flex: 0 4 auto;
   font-size: 14px;
   color: #6b6b6b;
-}
-
-/* Library tabs: Saved and Archived, underlined like a magazine's section rule. */
-
-.tabs {
-  display: flex;
-  gap: 4px;
-  margin-top: 12px;
-  border-bottom: 1px solid #e6e6e6;
-}
-
-.tab {
-  min-height: 40px;
-  padding: 8px 12px;
-  margin-bottom: -1px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  font-size: 15px;
-  color: #6b6b6b;
-}
-
-.tab[aria-selected='true'] {
-  color: #111;
-  font-weight: 600;
-  border-bottom-color: #111;
-}
-
-@media (hover: hover) {
-  .tab:hover:not(:disabled) {
-    background: transparent;
-    color: #111;
-  }
-}
-
-.tab:focus-visible {
-  outline-offset: -2px;
 }
 
 /* Archived: one group per brewed issue. */
@@ -2443,21 +2316,8 @@ button:disabled {
     font-size: 15px;
   }
 
-  .split-caret {
-    min-width: 44px;
-  }
-
   .brand {
     min-height: 40px;
-  }
-
-  .menu-item {
-    padding: 12px 12px 12px 32px;
-  }
-
-  .menu-item[aria-checked='true']::before {
-    left: 13px;
-    top: 17px;
   }
 
   /* 16px keeps iOS from zooming in on focus. */
@@ -2477,10 +2337,6 @@ button:disabled {
   .header-actions {
     width: 100%;
     justify-content: space-between;
-  }
-
-  .address-bar {
-    flex: 1 1 100%;
   }
 
   .header-actions .who {
@@ -3408,32 +3264,15 @@ a.ob-cta {
   }
 }
 
-/* Phones: the brand gets its own row, then the nav and Sign out share the second. DOM order is brand, nav,
-   actions, so focus follows what you see on every width. */
+/* Phones: the header is a wrapping flex row (.header .container), so the brand gets its own row and the nav and
+   Sign out share the second. DOM order is brand, nav, actions, so focus follows what you see on every width. */
 @media (max-width: 600px) {
-  .desk-header {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      'brand brand'
-      'nav actions';
-    align-items: center;
-    gap: 4px 12px;
-  }
-
-  .desk-header > .brand {
-    grid-area: brand;
-    justify-self: start;
-  }
-
   .desk-header > .desk-nav {
-    grid-area: nav;
     margin: 0 0 0 -12px;
     min-width: 0;
   }
 
   .desk-header > .header-actions {
-    grid-area: actions;
     width: auto;
   }
 }
