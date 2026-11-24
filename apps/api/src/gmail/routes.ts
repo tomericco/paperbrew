@@ -1,7 +1,9 @@
+import { waitUntil } from '@vercel/functions';
 import { Hono } from 'hono';
 import { config } from '../config.js';
 import { pool } from '../db/client.js';
 import { enqueue } from '../jobs/queue.js';
+import { DRAIN, drain } from '../jobs/runner.js';
 import { requireUser, type UserEnv } from '../routes/library.js';
 import { gmailAvailable } from './available.js';
 import { authUrl, exchangeCode, getProfile, revokeToken } from './client.js';
@@ -73,6 +75,11 @@ gmail.get('/gmail/callback', async (c) => {
   } catch (err) {
     console.warn('[gmail] connect failed:', messageOf(err));
     return fail();
+  }
+  // On Vercel there is no long-lived worker: run the jobs after the redirect is sent, so the starter fetch
+  // lands while the welcome page polls. Anything left over is picked up by the tick. Same as the inbound webhook.
+  if (process.env.VERCEL) {
+    waitUntil(drain(DRAIN).catch((err) => console.error('[gmail] drain failed:', messageOf(err))));
   }
   return c.redirect(returnUrl(returnTo, 'connected'), 302);
 });

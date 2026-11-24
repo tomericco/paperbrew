@@ -5,7 +5,7 @@ import { ZodError } from 'zod';
 import { config } from './config.js';
 import { pool } from './db/client.js';
 import { enqueue } from './jobs/queue.js';
-import { drain } from './jobs/runner.js';
+import { DRAIN, drain } from './jobs/runner.js';
 import { tick } from './cron/tick.js';
 import { normalizePostmark } from './inbound/postmark.js';
 import { normalizeCloudmailin } from './inbound/cloudmailin.js';
@@ -22,9 +22,6 @@ import { issues } from './print/issues.js';
 import { MODEL_ID, zeroShot } from './gmail/model.js';
 
 export const app = new Hono();
-
-// Stays well inside Vercel Hobby's 300 s function limit.
-const DRAIN = { budgetMs: 50_000, concurrency: 4 };
 
 app.get('/health', async (c) => {
   await pool.query('select 1');

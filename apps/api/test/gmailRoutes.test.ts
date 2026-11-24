@@ -9,6 +9,8 @@ const authUrl = vi.fn();
 const exchangeCode = vi.fn();
 const getProfile = vi.fn();
 const revokeToken = vi.fn();
+const drain = vi.fn();
+const waitUntil = vi.fn();
 
 class GmailAuthError extends Error {}
 
@@ -27,6 +29,8 @@ vi.mock('../src/routes/library.js', () => ({
 }));
 vi.mock('../src/db/client.js', () => ({ pool: { query } }));
 vi.mock('../src/jobs/queue.js', () => ({ enqueue }));
+vi.mock('../src/jobs/runner.js', () => ({ drain, DRAIN: { budgetMs: 50_000, concurrency: 4 } }));
+vi.mock('@vercel/functions', () => ({ waitUntil }));
 vi.mock('../src/gmail/client.js', () => ({ authUrl, exchangeCode, getProfile, revokeToken, GmailAuthError }));
 
 const { gmail } = await import('../src/gmail/routes.js');
@@ -48,6 +52,7 @@ beforeEach(() => {
   getProfile.mockResolvedValue({ emailAddress: 'me@gmail.com', historyId: '4242' });
   revokeToken.mockResolvedValue(undefined);
   enqueue.mockResolvedValue(undefined);
+  drain.mockResolvedValue(0);
 });
 
 afterEach(() => {
@@ -245,6 +250,51 @@ describe('GET /gmail/callback', () => {
     expectError(await call(good()));
     expect(upserts()).toHaveLength(0);
     expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  describe('running the queued jobs right away (Vercel has no worker)', () => {
+    beforeEach(() => vi.stubEnv('VERCEL', '1'));
+
+    it('drains in the background after enqueuing, with the webhook budget', async () => {
+      const res = await call(good());
+      expect(res.status).toBe(302);
+      expect(drain).toHaveBeenCalledTimes(1);
+      expect(drain).toHaveBeenCalledWith({ budgetMs: 50_000, concurrency: 4 });
+      expect(waitUntil).toHaveBeenCalledTimes(1);
+      const lastEnqueue = Math.max(...enqueue.mock.invocationCallOrder);
+      expect(drain.mock.invocationCallOrder[0]).toBeGreaterThan(lastEnqueue);
+    });
+
+    it('does not wait for the drain before redirecting', async () => {
+      drain.mockReturnValue(new Promise(() => {}));
+      const res = await call(good());
+      expect(res.headers.get('location')).toBe(`${WEB}/app/settings?gmail=connected`);
+    });
+
+    it('logs only the message when the drain fails', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      drain.mockRejectedValue(new Error('lane failed'));
+      await call(good());
+      await (waitUntil.mock.calls[0][0] as Promise<unknown>);
+      expect(error).toHaveBeenCalledWith('[gmail] drain failed:', 'lane failed');
+    });
+
+    it('does not drain on a cancelled or failed connect', async () => {
+      await call('?error=access_denied');
+      exchangeCode.mockResolvedValue({ accessToken: 'access-1', refreshToken: null });
+      await call(good());
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      exchangeCode.mockRejectedValue(new Error('boom'));
+      await call(good());
+      expect(drain).not.toHaveBeenCalled();
+      expect(waitUntil).not.toHaveBeenCalled();
+    });
+  });
+
+  it('does not drain off Vercel (the local worker runs the jobs)', async () => {
+    vi.stubEnv('VERCEL', '');
+    await call(good());
+    expect(drain).not.toHaveBeenCalled();
   });
 
   it('answers 503 when Gmail is not configured', async () => {

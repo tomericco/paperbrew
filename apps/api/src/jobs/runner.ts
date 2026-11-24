@@ -27,6 +27,9 @@ export async function runOne(): Promise<boolean> {
   return true;
 }
 
+/** Draining after a request: stays well inside Vercel Hobby's 300 s function limit. */
+export const DRAIN = { budgetMs: 50_000, concurrency: 4 };
+
 export interface DrainOptions {
   budgetMs: number;
   concurrency: number;
