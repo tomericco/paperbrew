@@ -77,6 +77,6 @@ All from the repo root:
 3. ~~Articles API~~ done: list, remove, and address change. Rename is still to do.
 4. Confirmation reply email ("Saved 2 articles"), and a reply on failure.
 5. Magazine model plus print/PDF rendering. `GET /brew` already renders all saved articles to a PDF, flat or as an imposed A4 booklet (done); the magazine model (reorder, rename, looks, optional pages) is still to do.
-6. ~~Gmail newsletters~~ done: opt-in sync into the library (hourly tick queues `gmail_sync`).
+6. ~~Gmail newsletters~~ done: opt-in sync into the library (hourly tick queues `gmail_sync`); the first connect also queues a one-off `gmail_starter` that saves up to 3 newsletters from the last 30 days.
 7. ~~Brewing schedule (PR 2)~~ done: per-user days, hour, time zone and reading-time budget; the hourly tick queues `create_issue`, which stores a queued `issues` row. It is gated by `AUTOBREW_ENABLED` (default off, which also hides the Schedule settings) until printing exists.
 8. ~~Print API and pairing~~ done (PR 3). ~~Mac app~~ built (PR 4). Remaining: Apple signing and notarization before giving it to non-technical users; hosting the `.dmg` and setting `MAC_APP_URL`. Follow-ups: the pairing dialog should show which account a code belongs to (needs a server code-preview endpoint: a link can carry an attacker's own code with the real host); show a 'printing' state; `createIssue` should check for a paired device before scheduling brews.

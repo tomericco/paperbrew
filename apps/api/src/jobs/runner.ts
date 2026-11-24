@@ -3,6 +3,7 @@ import { claim, complete, fail } from './queue.js';
 import { processEmail } from '../pipeline/processEmail.js';
 import { fetchArticle } from '../pipeline/fetchArticle.js';
 import { syncGmail } from '../gmail/sync.js';
+import { fetchStarterArticles } from '../gmail/starter.js';
 import { createIssue } from '../schedule/createIssue.js';
 import { FetchError } from '../fetch/safeFetch.js';
 
@@ -14,6 +15,7 @@ export async function runOne(): Promise<boolean> {
     if (job.type === 'process_email') await processEmail(job.payload.id);
     else if (job.type === 'fetch_article') await fetchArticle(job.payload.id, job.attempts >= job.max_attempts);
     else if (job.type === 'gmail_sync') await syncGmail(job.payload.id, { lastAttempt: job.attempts >= job.max_attempts });
+    else if (job.type === 'gmail_starter') await fetchStarterArticles(job.payload.id, { lastAttempt: job.attempts >= job.max_attempts });
     else if (job.type === 'create_issue') await createIssue(job.payload.id);
     else throw new Error(`Unknown job type ${job.type}`);
     await complete(pool, job.id);

@@ -133,6 +133,10 @@ select cron.unschedule('paperbrew-tick');
 
 Gmail features appear only when `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GMAIL_TOKEN_KEY` are all set.
 
+**Starter fetch.** The regular sync only looks at mail that arrives after the connect. So the first connect also queues a one-off `gmail_starter` job (`src/gmail/starter.ts`): it scans up to 40 messages from the last 30 days (`newer_than:30d -in:sent -in:chats -in:drafts`) through the same per-message pipeline, stops after 3 articles, and sets `gmail_connections.starter_done_at`, also when it found nothing, when Google revoked access (the connection is flagged `needs_reconnect` like the sync) and on the job's last failed attempt. The callback queues it only while `starter_done_at` is null, so a reconnect does not repeat it (a disconnect deletes the row, so connecting again afterwards does). `GET /me/gmail` reports `starter: { state: 'pending' | 'done', saved }`, where `saved` counts all of the user's `added_via = 'gmail'` articles.
+
+**Return target.** `GET /gmail/connect?from=welcome` returns to `/app/welcome?gmail=connected|error` after Google; anything else returns to `/app/settings?gmail=...`. The target is signed into the OAuth state (`<userId>.<welcome|settings>.<expiresAt>.<hmac>`), so it cannot be changed on the way back.
+
 ## Print agent API
 
 The Mac app (a local agent) prints queued issues. It talks to these routes; everything else in this section is its contract. Tables: `issues`, `print_devices` (one row per paired Mac, only the SHA-256 of its token), `print_pair_codes` (single-use codes, 10 minutes, only the hash).
