@@ -131,6 +131,6 @@
 **Files:**
 - Modify: `CLAUDE.md` (v1 scope and next tasks: onboarding done, the flow, `needsOnboarding`), `apps/web/README.md` if it lists pages
 
-- [ ] **Step 1: Update docs.** One short section on the first-run flow, the desk, and the new API calls.
+- [ ] **Step 1: Update docs.** One short section on the first-run flow, the desk, and the new API calls. Also correct `apps/api/README.md` and `CLAUDE.md` where they say `GET /brew` without `ids` brews "every" or "all" saved articles: it brews at most the 50 oldest ready, unarchived ones, and the `x-brew-article-ids` response header lists what went in.
 - [ ] **Step 2: Run** `npm test`, `npm run typecheck`, `npm run build -w @paperbrew/web`. Expected: PASS.
 - [ ] **Step 3: Commit** `docs: onboarding flow and desk`.
