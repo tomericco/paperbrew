@@ -30,6 +30,11 @@ const CARDS: Partial<Record<Step, ComponentType<CardProps>>> = {
 
 const registered = (step: Step) => CARDS[step] !== undefined;
 
+/** Cards with nothing to offer on this server; see `Flow`. */
+function isSkipped(step: Step, available: { schedule: boolean; printer: boolean }): boolean {
+  return (step === 'schedule' && !available.schedule) || (step === 'printer' && !available.printer);
+}
+
 function initialStep(): Step {
   // The Google round trip comes back as ?gmail=connected|error and must land on the Gmail card. The query is
   // left in the URL for that card to read and strip (so a later reload does not force it again).
@@ -64,33 +69,39 @@ function Flow() {
     setStep(to);
   }, []);
 
-  // Without a scheduler on the server the Schedule card has nothing to set, so it is passed over in both directions
-  // (Next from First issue lands on Printer, Back from Printer on First issue). Asked once; a failed
-  // request counts as available, since the card then says so itself. The dots still read "Step n of 5".
-  const scheduleAvailable = useRef<Promise<boolean> | undefined>(undefined);
-  const hasSchedule = useCallback(() => {
-    scheduleAvailable.current ??= load<{ scheduleAvailable: boolean }>('/api/me').then((me) => me?.scheduleAvailable !== false);
-    return scheduleAvailable.current;
+  // Two cards can have nothing to offer: Schedule when the server has no scheduler, Printer when there is no Mac app
+  // to download (the same rules as Settings). They are passed over in both directions, so Back never bounces forward
+  // again. Asked once; a failed request counts as available, since the card then says so itself. The dots still
+  // read "Step n of 5".
+  const availability = useRef<Promise<{ schedule: boolean; printer: boolean }> | undefined>(undefined);
+  const getAvailability = useCallback(() => {
+    availability.current ??= load<{ scheduleAvailable: boolean; macAppUrl: string | null }>('/api/me').then((me) => ({
+      schedule: me?.scheduleAvailable !== false,
+      printer: me === null || !!me.macAppUrl,
+    }));
+    return availability.current;
   }, []);
 
   const move = useCallback(
     async (from: Step, direction: 1 | -1) => {
+      const available = await getAvailability();
       const at = STEP_ORDER.indexOf(from);
       for (let i = at + direction; i >= 0 && i < STEP_ORDER.length; i += direction) {
         const candidate = STEP_ORDER[i];
-        if (!registered(candidate)) continue;
-        if (candidate === 'schedule' && !(await hasSchedule())) continue;
+        if (!registered(candidate) || isSkipped(candidate, available)) continue;
         return go(candidate);
       }
     },
-    [go, hasSchedule],
+    [go, getAvailability],
   );
 
-  // A reload on the Schedule card with no scheduler goes on to Printer.
+  // A reload on a card that is now passed over goes on to the nearest card after it.
+  const opened = useRef(step);
   useEffect(() => {
-    if (step === 'schedule') void hasSchedule().then((available) => available || go('printer'));
-    // Only the step the page opened on can be stale; later moves already skip it.
-  }, []);
+    void getAvailability().then((available) => {
+      if (isSkipped(opened.current, available)) void move(opened.current, 1);
+    });
+  }, [getAvailability, move]);
 
   const next = useCallback(() => void move(step, 1), [move, step]);
   const back = useCallback(() => void move(step, -1), [move, step]);
