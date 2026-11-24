@@ -17,7 +17,7 @@ const cfg = vi.hoisted(() => ({
 }));
 vi.mock('../src/config.js', () => ({ config: cfg }));
 // No job may actually run.
-vi.mock('../src/jobs/runner.js', () => ({ drain: vi.fn() }));
+vi.mock('../src/jobs/runner.js', () => ({ drain: vi.fn(), DRAIN: { budgetMs: 50_000, concurrency: 4 } }));
 
 const { app } = await import('../src/app.js');
 const { pool } = await import('../src/db/client.js');

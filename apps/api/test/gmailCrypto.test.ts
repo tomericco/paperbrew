@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { decryptToken, encryptToken } from '../src/gmail/crypto.js';
 import { signState, verifyState } from '../src/gmail/state.js';
@@ -35,8 +35,17 @@ describe('oauth state', () => {
   const secret = 'state-secret';
   const now = new Date('2026-11-22T10:00:00Z');
 
-  it('verifies a fresh state', () => {
-    expect(verifyState(signState('u1', secret, now), secret, now)).toEqual({ userId: 'u1' });
+  it('verifies a fresh state, returning to settings by default', () => {
+    expect(verifyState(signState('u1', secret, now), secret, now)).toEqual({ userId: 'u1', returnTo: 'settings' });
+  });
+
+  it('carries a signed return target', () => {
+    expect(verifyState(signState('u1', secret, now, 'welcome'), secret, now)).toEqual({ userId: 'u1', returnTo: 'welcome' });
+  });
+
+  it('rejects a tampered return target', () => {
+    const [user, , exp, sig] = signState('u1', secret, now, 'settings').split('.');
+    expect(verifyState([user, 'welcome', exp, sig].join('.'), secret, now)).toBeNull();
   });
 
   it('rejects an expired state (11 minutes)', () => {
@@ -49,25 +58,35 @@ describe('oauth state', () => {
   });
 
   it('rejects a tampered user id', () => {
-    const [, exp, sig] = signState('u1', secret, now).split('.');
-    expect(verifyState(['u2', exp, sig].join('.'), secret, now)).toBeNull();
+    const [, to, exp, sig] = signState('u1', secret, now).split('.');
+    expect(verifyState(['u2', to, exp, sig].join('.'), secret, now)).toBeNull();
   });
 
   it('rejects a tampered expiry: a later time under the old signature', () => {
-    const [user, exp, sig] = signState('u1', secret, now).split('.');
+    const [user, to, exp, sig] = signState('u1', secret, now).split('.');
     const later = String(Number(exp) + 60 * 60_000);
-    expect(verifyState([user, later, sig].join('.'), secret, now)).toBeNull();
+    expect(verifyState([user, to, later, sig].join('.'), secret, now)).toBeNull();
     // Sanity: the untouched state still verifies, so the null above is the signature check.
-    expect(verifyState([user, exp, sig].join('.'), secret, now)).toEqual({ userId: 'u1' });
+    expect(verifyState([user, to, exp, sig].join('.'), secret, now)).toEqual({ userId: 'u1', returnTo: 'settings' });
   });
 
   it('round-trips a user id that contains dots', () => {
-    expect(verifyState(signState('a.b.c', secret, now), secret, now)).toEqual({ userId: 'a.b.c' });
+    expect(verifyState(signState('a.b.c', secret, now, 'welcome'), secret, now)).toEqual({
+      userId: 'a.b.c',
+      returnTo: 'welcome',
+    });
   });
 
   it('returns null for malformed input without throwing', () => {
-    for (const bad of ['', 'abc', 'a.b', 'a.b.c', 'a.notanumber.zz', '...', 'u1.9999999999999.' ]) {
+    for (const bad of ['', 'abc', 'a.b', 'a.b.c', 'a.notanumber.zz', '...', 'u1.9999999999999.', 'u1.settings.9999999999999.']) {
       expect(verifyState(bad, secret, now)).toBeNull();
     }
+  });
+
+  it('rejects a state in the old format (no return target)', () => {
+    // Signed like the old <userId>.<expiresAt>.<hmac>: there is no return target, so it is refused.
+    const payload = `u1.${now.getTime() + 60_000}`;
+    const old = `${payload}.${createHmac('sha256', secret).update(payload).digest('base64url')}`;
+    expect(verifyState(old, secret, now)).toBeNull();
   });
 });

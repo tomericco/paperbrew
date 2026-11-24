@@ -5,6 +5,7 @@
 // The design's Contents page is left out.
 
 import type { PaperLayout } from './layout.js';
+import { DEFAULT_LOOK, lookCss, lookFontFamilies, type PaperLook } from './look.js';
 import { detectScript, directionOf, issueDirection, type Direction, type Script } from './direction.js';
 
 export type BrewArticle = {
@@ -17,10 +18,12 @@ export type BrewArticle = {
   contentHtml: string | null;
 };
 
-const FONTS =
+const fontsUrl = (look: PaperLook) =>
   'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500' +
   '&family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..700' +
-  '&family=Frank+Ruhl+Libre:wght@400;700&family=Noto+Naskh+Arabic:wght@400;700&display=block';
+  '&family=Frank+Ruhl+Libre:wght@400;700&family=Noto+Naskh+Arabic:wght@400;700' +
+  lookFontFamilies(look) +
+  '&display=block';
 
 const COVER_TITLES = 3;
 const EMPTY_LINE = 'Nothing to brew yet. Forward some articles first.';
@@ -288,19 +291,25 @@ const BOOKLET_CSS = `
 const FLAT_PAGE = pageRule('A4', '16mm 12mm');
 const BOOKLET_PAGE = pageRule('A5', '14mm 16mm 16mm');
 
-export function renderMagazine(input: { articles: BrewArticle[]; date: Date; layout?: PaperLayout }): string {
+export function renderMagazine(input: {
+  articles: BrewArticle[];
+  date: Date;
+  layout?: PaperLayout;
+  look?: PaperLook;
+}): string {
   const booklet = input.layout === 'booklet';
   const pieces = toPieces(input.articles);
   // Footer titles stop well short of the page number: about 60 characters fit the A4 text width, 42 the A5.
   const footers = pieces.map((p, i) => footerRule(p, i, booklet ? 42 : 60)).join('\n');
-  const css = (booklet ? BOOKLET_PAGE + CSS + BOOKLET_CSS : FLAT_PAGE + CSS) + footers;
+  const look = input.look ?? DEFAULT_LOOK;
+  const css = (booklet ? BOOKLET_PAGE + CSS + BOOKLET_CSS : FLAT_PAGE + CSS) + lookCss(look) + footers;
   const title = `Paperbrew · ${formatIssueDate(input.date)}`;
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <title>${escapeHtml(title)}</title>
-<link rel="stylesheet" href="${escapeHtml(FONTS)}">
+<link rel="stylesheet" href="${escapeHtml(fontsUrl(look))}">
 <style>${css}</style>
 </head>
 <body>

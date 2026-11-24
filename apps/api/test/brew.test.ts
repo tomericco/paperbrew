@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { magazineDirection, renderMagazine, type BrewArticle } from '../src/brew/render.js';
+import { lookCss } from '../src/brew/look.js';
 
 const DATE = new Date('2026-11-01T12:00:00Z');
 
@@ -285,5 +286,56 @@ describe('booklet layout and right-to-left', () => {
     expect(magazineDirection([hebrew, first])).toBe('ltr');
     expect(magazineDirection([])).toBe('ltr');
     expect(magazineDirection([article({ contentHtml: null }), hebrew])).toBe('rtl');
+  });
+});
+
+describe('looks', () => {
+  const html = (look?: 'broadsheet' | 'fieldnotes' | 'zine', over: Partial<BrewArticle> = {}) =>
+    renderMagazine({ articles: [first, article(over)], date: DATE, look });
+  const fontsLink = (h: string) => /<link rel="stylesheet" href="([^"]+)">/.exec(h)![1];
+
+  it('broadsheet is byte-identical to no look, and adds no fonts or overrides', () => {
+    expect(html('broadsheet')).toBe(html());
+    expect(fontsLink(html())).not.toContain('DM+Sans');
+    expect(fontsLink(html())).not.toContain('Space+Mono');
+    expect(lookCss('broadsheet')).toBe('');
+  });
+
+  it('fieldnotes sets DM Sans and the orange accent, and loads the font', () => {
+    const h = html('fieldnotes');
+    expect(h).toContain('DM Sans');
+    expect(h).toContain('#d9480f');
+    expect(fontsLink(h)).toContain('DM+Sans');
+    expect(fontsLink(h)).not.toContain('Space+Mono');
+    expect(fontsLink(h)).toContain('display=block');
+  });
+
+  it('zine sets Space Mono headings, Source Serif 4 body and the blue accent, and loads the font', () => {
+    const h = html('zine');
+    expect(h).toContain('Space Mono');
+    expect(h).toContain('#1d4ed8');
+    expect(h).not.toContain('DM Sans');
+    expect(fontsLink(h)).toContain('Space+Mono');
+    expect(fontsLink(h)).not.toContain('DM+Sans');
+    expect(fontsLink(h)).toContain('display=block');
+    expect(lookCss('zine')).not.toMatch(/body\s*\{[^}]*font-family/); // the body keeps Source Serif 4
+    expect(lookCss('zine')).toMatch(/\.headline, \.cover-title \.t \{ overflow-wrap: anywhere; \}/);
+  });
+
+  it.each(['fieldnotes', 'zine'] as const)('%s keeps the Hebrew and Arabic fallbacks in every font stack', (look) => {
+    const css = lookCss(look);
+    const stacks = css.match(/font-family:[^;}]+/g) ?? [];
+    expect(stacks.length).toBeGreaterThan(0);
+    for (const stack of stacks) {
+      expect(stack).toContain("'Frank Ruhl Libre', 'Noto Naskh Arabic'");
+    }
+    const h = html(look, { contentHtml: '<p>שלום עולם</p>' });
+    expect(h).toContain('dir="rtl"');
+  });
+
+  it('the look comes after the base and booklet styles, before the footers', () => {
+    const h = renderMagazine({ articles: [first], date: DATE, layout: 'booklet', look: 'zine' });
+    expect(h.indexOf('#1d4ed8')).toBeGreaterThan(h.indexOf('.headline { font-size: 28px; }'));
+    expect(h.indexOf('#1d4ed8')).toBeLessThan(h.indexOf('@page piece-1'));
   });
 });

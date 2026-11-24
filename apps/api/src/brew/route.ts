@@ -1,18 +1,33 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { pool } from '../db/client.js';
 import { requireUser, type UserEnv } from '../routes/library.js';
 import { BusyError } from './lifecycle.js';
 import { renderIssuePdf } from './issuePdf.js';
 import type { PaperLayout } from './layout.js';
+import { toPaperLook } from './look.js';
 import type { BrewArticle } from './render.js';
+import { UUID_RE } from '../uuid.js';
 
 const MAX_ARTICLES = 50;
+
+/** `?ids=<uuid>,<uuid>`: 1 to 50 UUIDs. A blank or malformed entry fails the whole list. */
+const IdsParam = z.string().transform((v) => v.split(',')).pipe(z.array(z.string().regex(UUID_RE)).min(1).max(MAX_ARTICLES));
 
 /** GET /brew: the signed-in user's ready articles as a printable PDF magazine. */
 export const brew = new Hono<UserEnv>();
 brew.use('/brew', requireUser);
 
 brew.get('/brew', async (c) => {
+  // Optional: brew just this set. Someone else's or archived ids simply don't match.
+  const rawIds = c.req.query('ids');
+  let ids: string[] | undefined;
+  if (rawIds !== undefined) {
+    const parsed = IdsParam.safeParse(rawIds);
+    if (!parsed.success) return c.json({ error: `ids must be 1 to ${MAX_ARTICLES} comma-separated article ids` }, 400);
+    ids = parsed.data;
+  }
+
   const { rows } = await pool.query<{
     id: string;
     title: string | null;
@@ -24,17 +39,18 @@ brew.get('/brew', async (c) => {
   }>(
     `select id, title, author, site_name, source_url, reading_minutes, content_html
      from articles
-     where user_id = $1 and status = 'ready' and archived_at is null
+     where user_id = $1 and status = 'ready' and archived_at is null${ids ? '\n     and id = any($2)' : ''}
      order by created_at asc
      limit ${MAX_ARTICLES}`,
-    [c.get('userId')],
+    ids ? [c.get('userId'), ids] : [c.get('userId')],
   );
 
-  const { rows: users } = await pool.query<{ paper_layout: string | null }>(
-    'select paper_layout from users where id = $1',
+  const { rows: users } = await pool.query<{ paper_layout: string | null; paper_look: string | null }>(
+    'select paper_layout, paper_look from users where id = $1',
     [c.get('userId')],
   );
   const layout: PaperLayout = users[0]?.paper_layout === 'booklet' ? 'booklet' : 'flat';
+  const look = toPaperLook(users[0]?.paper_look);
 
   const articles: BrewArticle[] = rows.map((r) => ({
     title: r.title,
@@ -48,7 +64,7 @@ brew.get('/brew', async (c) => {
   const date = new Date();
   let pdf: ReadableStream<Uint8Array>;
   try {
-    pdf = await renderIssuePdf(articles, layout, date);
+    pdf = await renderIssuePdf(articles, layout, date, look);
   } catch (err) {
     if (err instanceof BusyError) {
       return c.json({ error: 'Another magazine is brewing. Try again in a minute.' }, 503);

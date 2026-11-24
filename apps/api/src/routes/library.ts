@@ -4,11 +4,14 @@ import { z } from 'zod';
 import { auth } from '../auth/auth.js';
 import { provisionUser } from '../auth/provision.js';
 import { PAPER_LAYOUTS, type PaperLayout } from '../brew/layout.js';
+import { PAPER_LOOKS, type PaperLook } from '../brew/look.js';
 import { config } from '../config.js';
 import { isUniqueViolation, pool } from '../db/client.js';
 import { gmailAvailable } from '../gmail/available.js';
 import { senderEmail } from '../gmail/rules.js';
 import { formatAddress, normalizeToken } from '../inbound/address.js';
+import { CANDIDATES_SQL } from '../schedule/createIssue.js';
+import { DEFAULT_MINUTES, planIssue } from '../schedule/pick.js';
 import { isBrewDue, nextBrewAt } from '../schedule/schedule.js';
 import { UUID_RE } from '../uuid.js';
 
@@ -50,8 +53,23 @@ const addressOf = (token: string) => ({ address: formatAddress(config.INBOUND_AD
 
 library.get('/me', async (c) => {
   const userId = c.get('userId');
-  const { rows } = await pool.query<{ token: string; email: string | null; paper_layout: PaperLayout }>(
-    `select a.token, u.email, u.paper_layout
+  const { rows } = await pool.query<{
+    token: string;
+    email: string | null;
+    paper_layout: PaperLayout;
+    paper_look: PaperLook;
+    onboarded: boolean;
+    has_articles: boolean;
+    has_gmail: boolean;
+    has_device: boolean;
+    brew_enabled: boolean;
+  }>(
+    `select a.token, u.email, u.paper_layout, u.paper_look, u.brew_enabled,
+            u.onboarded_at is not null as onboarded,
+            -- Archived and not-ready articles count on purpose: an existing user must never be sent to onboarding.
+            exists (select 1 from articles where user_id = u.id) as has_articles,
+            exists (select 1 from gmail_connections where user_id = u.id) as has_gmail,
+            exists (select 1 from print_devices where user_id = u.id and revoked_at is null) as has_device
      from users u join inbound_addresses a on a.user_id = u.id and a.disabled_at is null
      where u.id = $1
      order by a.created_at desc
@@ -64,10 +82,18 @@ library.get('/me', async (c) => {
     ...addressOf(row.token),
     email: row.email,
     paperLayout: row.paper_layout,
+    paperLook: row.paper_look,
+    // Computed, never stored: an existing user who already uses the product is never sent through onboarding.
+    needsOnboarding: !(row.onboarded || row.has_articles || row.has_gmail || row.has_device || row.brew_enabled),
     gmailAvailable: gmailAvailable(process.env),
     scheduleAvailable: config.AUTOBREW_ENABLED,
     macAppUrl: config.MAC_APP_URL ?? null,
   });
+});
+
+library.post('/me/onboarding/complete', async (c) => {
+  await pool.query('update users set onboarded_at = coalesce(onboarded_at, now()) where id = $1', [c.get('userId')]);
+  return c.body(null, 204);
 });
 
 const AddressBody = z.object({ token: z.string() });
@@ -133,6 +159,7 @@ const BUDGET_MINUTES = [30, 45, 60, 90];
 const SettingsBody = z
   .object({
     paperLayout: z.enum(PAPER_LAYOUTS),
+    paperLook: z.enum(PAPER_LOOKS),
     brewEnabled: z.boolean(),
     brewDays: z
       .array(z.number().int().min(0).max(6))
@@ -146,10 +173,11 @@ const SettingsBody = z
   .refine((b) => Object.values(b).some((v) => v !== undefined));
 
 const SETTINGS_ERROR =
-  'Send at least one of paperLayout (flat or booklet), brewEnabled, brewDays (0-6), brewHour (0-23), brewTimezone (IANA) or brewBudgetMinutes (30, 45, 60 or 90)';
+  'Send at least one of paperLayout (flat or booklet), paperLook (broadsheet, fieldnotes or zine), brewEnabled, brewDays (0-6), brewHour (0-23), brewTimezone (IANA) or brewBudgetMinutes (30, 45, 60 or 90)';
 
 type SettingsRow = {
   paper_layout: PaperLayout;
+  paper_look: PaperLook;
   brew_enabled: boolean;
   brew_days: number[];
   brew_hour: number;
@@ -165,6 +193,7 @@ library.put('/me/settings', async (c) => {
   // Only the provided keys are set; every value goes in as a parameter.
   const columns: Array<[string, unknown]> = [];
   if (b.paperLayout !== undefined) columns.push(['paper_layout', b.paperLayout]);
+  if (b.paperLook !== undefined) columns.push(['paper_look', b.paperLook]);
   if (b.brewEnabled !== undefined) columns.push(['brew_enabled', b.brewEnabled]);
   if (b.brewDays !== undefined) columns.push(['brew_days', [...b.brewDays].sort((x, y) => x - y)]);
   if (b.brewHour !== undefined) columns.push(['brew_hour', b.brewHour]);
@@ -173,13 +202,14 @@ library.put('/me/settings', async (c) => {
 
   const sets = columns.map(([column], i) => `${column} = $${i + 1}`).join(', ');
   const { rows } = await pool.query<SettingsRow>(
-    `update users set ${sets} where id = $${columns.length + 1} returning paper_layout, brew_enabled, brew_days, brew_hour, brew_timezone, brew_budget_minutes`,
+    `update users set ${sets} where id = $${columns.length + 1} returning paper_layout, paper_look, brew_enabled, brew_days, brew_hour, brew_timezone, brew_budget_minutes`,
     [...columns.map(([, value]) => value), c.get('userId')],
   );
   const row = rows[0];
   if (!row) return c.json({ error: 'not found' }, 404);
   return c.json({
     paperLayout: row.paper_layout,
+    paperLook: row.paper_look,
     brewEnabled: row.brew_enabled,
     brewDays: row.brew_days,
     brewHour: row.brew_hour,
@@ -189,7 +219,7 @@ library.put('/me/settings', async (c) => {
 });
 
 library.get('/me/schedule', async (c) => {
-  const { rows } = await pool.query<Omit<SettingsRow, 'paper_layout'> & { last_brew_at: Date | null }>(
+  const { rows } = await pool.query<Omit<SettingsRow, 'paper_layout' | 'paper_look'> & { last_brew_at: Date | null }>(
     'select brew_enabled, brew_days, brew_hour, brew_timezone, brew_budget_minutes, last_brew_at from users where id = $1',
     [c.get('userId')],
   );
@@ -211,6 +241,29 @@ library.get('/me/schedule', async (c) => {
   });
 });
 
+/**
+ * Read-only preview of what the next scheduled issue would hold: the same candidates and pick rule as createIssue,
+ * with no writes and no rollover. Works whether or not the schedule is on.
+ */
+library.get('/me/next-issue', async (c) => {
+  const userId = c.get('userId');
+  const { rows: users } = await pool.query<{ brew_budget_minutes: number }>(
+    'select brew_budget_minutes from users where id = $1',
+    [userId],
+  );
+  if (!users[0]) return c.json({ error: 'not found' }, 404);
+  const budgetMinutes = users[0].brew_budget_minutes;
+  const { rows } = await pool.query<{ id: string; reading_minutes: number | null; rollover_count: number }>(CANDIDATES_SQL, [userId]);
+  const { picked } = planIssue(
+    rows.map((r) => ({ id: r.id, readingMinutes: r.reading_minutes, rolloverCount: r.rollover_count })),
+    budgetMinutes,
+  );
+  const byId = new Map(rows.map((r) => [r.id, r.reading_minutes]));
+  // A null reading time counts as DEFAULT_MINUTES, as in planIssue.
+  const minutes = picked.reduce((sum, id) => sum + (byId.get(id) ?? DEFAULT_MINUTES), 0);
+  return c.json({ ids: picked, minutes, budgetMinutes });
+});
+
 type ArticleRow = {
   id: string;
   title: string | null;
@@ -218,6 +271,7 @@ type ArticleRow = {
   source_url: string | null;
   status: string;
   word_count: number | null;
+  reading_minutes: number | null;
   added_via: string;
   created_at: Date;
   archived_at?: Date;
@@ -231,6 +285,7 @@ const toArticle = (r: ArticleRow) => ({
   sourceUrl: r.source_url,
   status: r.status,
   wordCount: r.word_count,
+  readingMinutes: r.reading_minutes,
   addedVia: r.added_via,
   createdAt: r.created_at,
 });
@@ -239,7 +294,7 @@ library.get('/articles', async (c) => {
   const userId = c.get('userId');
   if (c.req.query('archived') === '1') {
     const { rows } = await pool.query<ArticleRow & { archived_at: Date }>(
-      `select id, title, site_name, source_url, status, word_count, added_via, created_at, archived_at, archive_reason
+      `select id, title, site_name, source_url, status, word_count, reading_minutes, added_via, created_at, archived_at, archive_reason
        from articles
        where user_id = $1 and archived_at is not null
        order by archived_at desc, created_at asc
@@ -249,7 +304,7 @@ library.get('/articles', async (c) => {
     return c.json({ articles: rows.map((r) => ({ ...toArticle(r), archivedAt: r.archived_at, archiveReason: r.archive_reason ?? null })) });
   }
   const { rows } = await pool.query<ArticleRow>(
-    `select id, title, site_name, source_url, status, word_count, added_via, created_at
+    `select id, title, site_name, source_url, status, word_count, reading_minutes, added_via, created_at
      from articles
      where user_id = $1 and archived_at is null
      order by created_at desc

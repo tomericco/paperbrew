@@ -9,6 +9,8 @@ const authUrl = vi.fn();
 const exchangeCode = vi.fn();
 const getProfile = vi.fn();
 const revokeToken = vi.fn();
+const drain = vi.fn();
+const waitUntil = vi.fn();
 
 class GmailAuthError extends Error {}
 
@@ -27,6 +29,8 @@ vi.mock('../src/routes/library.js', () => ({
 }));
 vi.mock('../src/db/client.js', () => ({ pool: { query } }));
 vi.mock('../src/jobs/queue.js', () => ({ enqueue }));
+vi.mock('../src/jobs/runner.js', () => ({ drain, DRAIN: { budgetMs: 50_000, concurrency: 4 } }));
+vi.mock('@vercel/functions', () => ({ waitUntil }));
 vi.mock('../src/gmail/client.js', () => ({ authUrl, exchangeCode, getProfile, revokeToken, GmailAuthError }));
 
 const { gmail } = await import('../src/gmail/routes.js');
@@ -48,6 +52,7 @@ beforeEach(() => {
   getProfile.mockResolvedValue({ emailAddress: 'me@gmail.com', historyId: '4242' });
   revokeToken.mockResolvedValue(undefined);
   enqueue.mockResolvedValue(undefined);
+  drain.mockResolvedValue(0);
 });
 
 afterEach(() => {
@@ -77,8 +82,20 @@ describe('GET /gmail/connect', () => {
     expect(res.status).toBe(302);
     const location = new URL(res.headers.get('location')!);
     expect(location.origin + location.pathname).toBe('https://accounts.example/auth');
-    expect(verifyState(location.searchParams.get('state')!, SECRET)).toEqual({ userId: 'user-1' });
+    expect(verifyState(location.searchParams.get('state')!, SECRET)).toEqual({ userId: 'user-1', returnTo: 'settings' });
     expect(authUrl).toHaveBeenCalledWith(expect.any(String), REDIRECT_URI);
+  });
+
+  it.each([
+    ['?from=welcome', 'welcome'],
+    ['?from=settings', 'settings'],
+    ['?from=evil', 'settings'],
+    ['?from=https://evil.example', 'settings'],
+    ['', 'settings'],
+  ])('signs the return target for %s as %s', async (qs, returnTo) => {
+    const res = await gmail.request(`/gmail/connect${qs}`, SIGNED_IN);
+    const state = new URL(res.headers.get('location')!).searchParams.get('state')!;
+    expect(verifyState(state, SECRET)).toEqual({ userId: 'user-1', returnTo });
   });
 
   it('answers 503 when Gmail is not configured', async () => {
@@ -117,8 +134,55 @@ describe('GET /gmail/callback', () => {
     expect(decryptToken(enc, TEST_KEY)).toBe('refresh-1');
     expect(params.join(' ')).not.toContain('access-1');
 
+    // First connect (starter_done_at null): the sync and the one-off starter fetch.
+    expect(sql).toMatch(/returning starter_done_at/);
+    expect(enqueue).toHaveBeenCalledTimes(2);
+    expect(enqueue).toHaveBeenCalledWith(expect.anything(), 'gmail_sync', { id: 'user-1' });
+    expect(enqueue).toHaveBeenCalledWith(expect.anything(), 'gmail_starter', { id: 'user-1' });
+  });
+
+  it('a reconnect after the starter fetch has run enqueues only gmail_sync', async () => {
+    query.mockImplementation(async (sql: string) =>
+      /insert into gmail_connections/.test(sql)
+        ? { rows: [{ starter_done_at: new Date('2026-11-20T10:00:00Z') }], rowCount: 1 }
+        : { rows: [], rowCount: 0 });
+    const res = await call(good());
+    expect(res.headers.get('location')).toBe(`${WEB}/app/settings?gmail=connected`);
     expect(enqueue).toHaveBeenCalledTimes(1);
     expect(enqueue).toHaveBeenCalledWith(expect.anything(), 'gmail_sync', { id: 'user-1' });
+  });
+
+  it('returns to the welcome page when the state says so', async () => {
+    const state = signState('user-1', SECRET, new Date(), 'welcome');
+    const res = await call(`?code=the-code&state=${encodeURIComponent(state)}`);
+    expect(res.headers.get('location')).toBe(`${WEB}/app/welcome?gmail=connected`);
+  });
+
+  it('returns to the welcome page with an error when the user cancels there', async () => {
+    const state = signState('user-1', SECRET, new Date(), 'welcome');
+    const res = await call(`?error=access_denied&state=${encodeURIComponent(state)}`);
+    expect(res.headers.get('location')).toBe(`${WEB}/app/welcome?gmail=error`);
+    expect(exchangeCode).not.toHaveBeenCalled();
+  });
+
+  it('connect with from=evil ends on settings', async () => {
+    const connect = await gmail.request('/gmail/connect?from=evil', SIGNED_IN);
+    const state = new URL(connect.headers.get('location')!).searchParams.get('state')!;
+    const res = await call(`?code=the-code&state=${encodeURIComponent(state)}`);
+    expect(res.headers.get('location')).toBe(`${WEB}/app/settings?gmail=connected`);
+  });
+
+  it('rejects a state whose return target was tampered with, and falls back to settings', async () => {
+    const [user, , exp, sig] = signState('user-1', SECRET).split('.');
+    const tampered = [user, 'welcome', exp, sig].join('.');
+    expectError(await call(`?code=the-code&state=${encodeURIComponent(tampered)}`));
+    expect(exchangeCode).not.toHaveBeenCalled();
+    expect(upserts()).toHaveLength(0);
+  });
+
+  it('ignores the return target of a state signed for another user', async () => {
+    const other = signState('user-2', SECRET, new Date(), 'welcome');
+    expectError(await call(`?error=access_denied&state=${encodeURIComponent(other)}`));
   });
 
   it('keeps the token and code out of the redirect', async () => {
@@ -188,6 +252,51 @@ describe('GET /gmail/callback', () => {
     expect(enqueue).not.toHaveBeenCalled();
   });
 
+  describe('running the queued jobs right away (Vercel has no worker)', () => {
+    beforeEach(() => vi.stubEnv('VERCEL', '1'));
+
+    it('drains in the background after enqueuing, with the webhook budget', async () => {
+      const res = await call(good());
+      expect(res.status).toBe(302);
+      expect(drain).toHaveBeenCalledTimes(1);
+      expect(drain).toHaveBeenCalledWith({ budgetMs: 50_000, concurrency: 4 });
+      expect(waitUntil).toHaveBeenCalledTimes(1);
+      const lastEnqueue = Math.max(...enqueue.mock.invocationCallOrder);
+      expect(drain.mock.invocationCallOrder[0]).toBeGreaterThan(lastEnqueue);
+    });
+
+    it('does not wait for the drain before redirecting', async () => {
+      drain.mockReturnValue(new Promise(() => {}));
+      const res = await call(good());
+      expect(res.headers.get('location')).toBe(`${WEB}/app/settings?gmail=connected`);
+    });
+
+    it('logs only the message when the drain fails', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      drain.mockRejectedValue(new Error('lane failed'));
+      await call(good());
+      await (waitUntil.mock.calls[0][0] as Promise<unknown>);
+      expect(error).toHaveBeenCalledWith('[gmail] drain failed:', 'lane failed');
+    });
+
+    it('does not drain on a cancelled or failed connect', async () => {
+      await call('?error=access_denied');
+      exchangeCode.mockResolvedValue({ accessToken: 'access-1', refreshToken: null });
+      await call(good());
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      exchangeCode.mockRejectedValue(new Error('boom'));
+      await call(good());
+      expect(drain).not.toHaveBeenCalled();
+      expect(waitUntil).not.toHaveBeenCalled();
+    });
+  });
+
+  it('does not drain off Vercel (the local worker runs the jobs)', async () => {
+    vi.stubEnv('VERCEL', '');
+    await call(good());
+    expect(drain).not.toHaveBeenCalled();
+  });
+
   it('answers 503 when Gmail is not configured', async () => {
     vi.stubEnv('GMAIL_TOKEN_KEY', '');
     const res = await call(good());
@@ -233,12 +342,33 @@ describe('GET /me/gmail', () => {
       email: 'me@gmail.com',
       status: 'active',
       lastSyncedAt: synced.toISOString(),
+      starter: { state: 'pending', saved: 0 },
       recent: [{ from: 'a@news.com', subject: 'Hello', decision: 'editorial', reason: 'long text', seenAt: seen.toISOString() }],
     });
     const recentCall = query.mock.calls.find(([sql]) => /from gmail_messages/.test(String(sql)))!;
     expect(String(recentCall[0])).toMatch(/order by seen_at desc/);
     expect(String(recentCall[0])).toMatch(/limit 20/);
     expect(recentCall[1]).toEqual(['user-1']);
+  });
+
+  it.each([
+    ['pending', null],
+    ['done', new Date('2026-11-20T10:00:00Z')],
+  ])('reports the starter fetch as %s, with the Gmail articles saved so far', async (state, starterDoneAt) => {
+    query.mockImplementation(async (sql: string) => {
+      if (/from gmail_connections/.test(sql)) {
+        return { rows: [{ google_email: 'me@gmail.com', status: 'active', last_synced_at: null, starter_done_at: starterDoneAt }] };
+      }
+      if (/from articles/.test(sql)) return { rows: [{ saved: 2 }] };
+      return { rows: [] };
+    });
+
+    const body = await (await gmail.request('/me/gmail', SIGNED_IN)).json();
+
+    expect(body.starter).toEqual({ state, saved: 2 });
+    const countCall = query.mock.calls.find(([sql]) => /from articles/.test(String(sql)))!;
+    expect(String(countCall[0]).replace(/\s+/g, ' ')).toMatch(/count\(\*\).*where user_id = \$1 and added_via = 'gmail'/);
+    expect(countCall[1]).toEqual(['user-1']);
   });
 
   it('leaves not-a-list skips out of the recent decisions', async () => {

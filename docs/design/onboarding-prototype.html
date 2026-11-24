@@ -1,0 +1,580 @@
+<title>Paperbrew Onboarding</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=Space+Mono:wght@400;700&display=swap">
+<style>
+/* Layout concept: one quiet card at a time for setup; after setup, a "desk" with the next issue on top, the reading pile below, and setup status in a side rail. Same editorial monochrome as the product: ink on warm paper, hairlines, no accent colour in the chrome. */
+:root {
+  --bg: #f6f4ef;
+  --card: #fffefb;
+  --ink: #111111;
+  --ink-2: #55524b;
+  --line: #d9d5cb;
+  --line-2: #ebe8e0;
+  --inv: #fffefb;
+  --warn-bg: #fbf1d9;
+  --warn-ink: #6b4a06;
+  --warn-line: #e4cd8e;
+  --sheet: #fffdf8;
+  --sheet-ink: #151412;
+  --display: 'Fraunces', 'Source Serif 4', Georgia, serif;
+  --body: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --ui: 'DM Sans', system-ui, sans-serif;
+  --gutter: 24px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141311; --card: #1c1b18; --ink: #f1eee7; --ink-2: #aaa69b; --line: #3a3832; --line-2: #2a2924;
+    --inv: #141311; --warn-bg: #2d2410; --warn-ink: #e8c777; --warn-line: #5a4616; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141311; --card: #1c1b18; --ink: #f1eee7; --ink-2: #aaa69b; --line: #3a3832; --line-2: #2a2924;
+  --inv: #141311; --warn-bg: #2d2410; --warn-ink: #e8c777; --warn-line: #5a4616; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--body); font-size: 17px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 96px;
+}
+h1, h2, h3 { font-family: var(--display); font-weight: 700; letter-spacing: -0.015em; line-height: 1.12; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(30px, 5vw, 40px); }
+h2 { font-size: 24px; }
+h3 { font-size: 18px; }
+p { margin: 0; }
+.muted { color: var(--ink-2); }
+.small { font-size: 14px; }
+.eyebrow { font-family: var(--ui); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* Buttons: hairline outline, filled on hover (as the product) */
+button, .btn { font: inherit; font-family: var(--ui); font-size: 14px; font-weight: 500; min-height: 44px; padding: 8px 18px; border: 1px solid var(--ink); border-radius: 4px; background: transparent; color: var(--ink); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; transition: background-color 120ms, color 120ms; }
+button:disabled { opacity: 0.45; cursor: default; }
+@media (hover: hover) { button:hover:not(:disabled) { background: var(--ink); color: var(--inv); } }
+.primary { background: var(--ink); color: var(--inv); }
+@media (hover: hover) { .primary:hover:not(:disabled) { background: transparent; color: var(--ink); } }
+.ghost { border-color: transparent; padding-inline: 10px; text-decoration: underline; text-underline-offset: 3px; }
+.sm { min-height: 40px; padding: 6px 14px; font-size: 13px; }
+.block { width: 100%; }
+
+/* Top bar */
+.top { max-width: 1120px; margin: 0 auto; padding-block: 20px; display: flex; align-items: center; gap: 24px; }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-weight: 700; font-size: 21px; }
+.nav { display: flex; gap: 4px; margin-left: auto; }
+.nav button { border: 0; border-radius: 4px; min-height: 40px; padding: 6px 12px; }
+.nav button[aria-current="page"] { background: var(--ink); color: var(--inv); }
+
+/* Onboarding card */
+.ob { max-width: 560px; margin: 0 auto; padding-top: 4px; }
+.dots { display: flex; gap: 6px; align-items: center; justify-content: center; margin-bottom: 20px; font-family: var(--ui); font-size: 13px; color: var(--ink-2); }
+.dots i { width: 28px; height: 3px; background: var(--line); border-radius: 2px; }
+.dots i.on { background: var(--ink); }
+.dots span { margin-left: 8px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 32px; display: flex; flex-direction: column; gap: 22px; }
+.ob .card { animation: rise 260ms ease-out both; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.foot { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.foot .grow { flex: 1; }
+.beats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
+.beats li { display: grid; grid-template-columns: 44px 1fr; gap: 14px; padding-block: 16px; border-top: 1px solid var(--line-2); align-items: start; }
+.beats li:first-child { border-top: 0; padding-top: 4px; }
+.beats svg { width: 44px; height: 44px; }
+.beats h3 { margin-bottom: 2px; }
+
+/* Choice cards, switches, chips */
+.choices { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.choice { text-align: left; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 6px; height: auto; padding: 14px; border-color: var(--line); background: transparent; }
+.choice[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+@media (hover: hover) { .choice:hover:not(:disabled) { background: transparent; color: var(--ink); border-color: var(--ink); } }
+.choice b { font-family: var(--ui); font-size: 14px; }
+.choice span { font-family: var(--ui); font-size: 12.5px; color: var(--ink-2); font-weight: 400; white-space: normal; text-align: left; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { min-width: 52px; border-color: var(--line); padding: 6px 12px; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--inv); border-color: var(--ink); }
+.sw { width: 46px; min-height: 28px; height: 28px; padding: 0; border-radius: 14px; position: relative; flex: none; }
+.sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--ink); transition: transform 160ms; }
+.sw::before { content: ""; position: absolute; inset: -8px -4px; }
+.hit { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; margin: -9px; cursor: pointer; }
+.sw[aria-checked="true"] { background: var(--ink); }
+.sw[aria-checked="true"]::after { transform: translateX(18px); background: var(--inv); }
+@media (hover: hover) { .sw:hover:not(:disabled) { background: transparent; } .sw[aria-checked="true"]:hover:not(:disabled) { background: var(--ink); } }
+.row { display: flex; align-items: center; gap: 12px; }
+.row.between { justify-content: space-between; }
+.list { list-style: none; margin: 0; padding: 0; }
+.list li { display: flex; align-items: center; gap: 12px; padding-block: 12px; border-top: 1px solid var(--line-2); }
+.list li:first-child { border-top: 0; }
+.list .grow { flex: 1; min-width: 0; }
+.field { font: inherit; font-family: var(--ui); font-size: 15px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--card); color: var(--ink); width: 100%; min-width: 0; }
+.field:focus-visible { border-color: var(--ink); }
+.callout { border: 1px solid var(--ink); border-radius: 6px; padding: 16px 18px; display: flex; flex-direction: column; gap: 2px; }
+.callout .big { font-family: var(--display); font-weight: 700; font-size: 24px; letter-spacing: -0.01em; }
+.warn { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); border-radius: 6px; padding: 14px 16px; font-family: var(--ui); font-size: 14px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.addr { display: flex; gap: 8px; align-items: center; }
+.addr code { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 4px; }
+.tick { width: 22px; height: 22px; flex: none; }
+.bar { height: 6px; background: var(--line-2); border-radius: 3px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--ink); width: 0; transition: width 200ms linear; }
+input[type=range] { width: 100%; accent-color: var(--ink); min-height: 40px; }
+
+/* Magazine preview. Pages are paper, so they keep paper colours in both themes. */
+.mag { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.6fr); gap: 14px; align-items: start; }
+.page { background: var(--sheet); color: var(--sheet-ink); border: 1px solid #d9d5cb; box-shadow: 0 6px 18px rgba(0,0,0,.14); aspect-ratio: 5 / 7; padding: 12px; display: flex; flex-direction: column; gap: 8px; font-family: var(--b); overflow: hidden; min-width: 0; }
+.cover { justify-content: space-between; }
+.cover .bar-a { height: 6px; background: var(--a); }
+.cover .meta { font-family: var(--ui); font-size: 7px; letter-spacing: .1em; text-transform: uppercase; opacity: .7; }
+.cover .t { font-family: var(--d); font-weight: 700; font-size: 25px; line-height: 1; letter-spacing: -0.02em; }
+.cover ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 8.5px; line-height: 1.25; }
+.cover li { border-top: 1px solid rgba(0,0,0,.18); padding-top: 4px; }
+.spread { display: grid; grid-template-columns: 1fr 1fr; box-shadow: 0 6px 18px rgba(0,0,0,.14); }
+.spread .page { box-shadow: none; }
+.spread .page:first-child { border-right-color: #bdb8ac; }
+.page .kick { font-family: var(--ui); font-size: 6.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--a); font-weight: 700; }
+.page h4 { margin: 0; font-family: var(--d); font-size: 12px; line-height: 1.1; font-weight: 700; }
+.page .tx { font-size: 6.6px; line-height: 1.4; }
+.page .quote { font-family: var(--d); font-size: 10px; line-height: 1.2; border-left: 2px solid var(--a); padding-left: 6px; }
+.mini { width: 100%; max-width: 150px; height: auto; }
+@media (max-width: 480px) { .page .tx { font-size: 6px; } .cover .t { font-size: 20px; } }
+
+/* Desk */
+.shell { max-width: 1120px; margin: 0 auto; }
+.desk { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
+@media (max-width: 899px) { .desk { grid-template-columns: minmax(0, 1fr); } }
+.stack { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.hero { padding: 32px; gap: 18px; }
+.hero .stats { display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: var(--ui); font-size: 14px; color: var(--ink-2); }
+.hero .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.pile { padding: 8px 24px; gap: 0; }
+.pile .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-block: 16px 8px; flex-wrap: wrap; }
+.art { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: center; padding-block: 14px; border-top: 1px solid var(--line-2); }
+.art .ti { font-family: var(--display); font-weight: 600; font-size: 17px; line-height: 1.25; }
+.art .sub { font-family: var(--ui); font-size: 13px; color: var(--ink-2); }
+.art input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--ink); margin: 0; }
+.tag { font-family: var(--ui); font-size: 12px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; white-space: nowrap; color: var(--ink-2); }
+.tag.in { border-color: var(--ink); color: var(--ink); }
+.empty { padding: 40px 12px; text-align: center; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+.rail { padding: 24px; gap: 4px; }
+.rail .list li { padding-block: 14px; align-items: flex-start; }
+.rail .st { font-family: var(--ui); font-size: 13px; color: var(--ink-2); }
+.rail b { font-family: var(--ui); font-size: 14px; }
+.sched-switch { display: flex; align-items: center; gap: 14px; }
+
+/* Sheet (brew dialog) and toast */
+.scrim { position: fixed; inset: 0; background: rgba(17,17,17,.5); display: flex; align-items: flex-end; justify-content: center; z-index: 20; padding: 16px; }
+@media (min-width: 640px) { .scrim { align-items: center; } }
+.sheet { background: var(--card); border: 1px solid var(--line); border-radius: 10px; width: 100%; max-width: 480px; padding: 28px; display: flex; flex-direction: column; gap: 18px; animation: rise 200ms ease-out both; max-height: 100%; overflow: auto; }
+.toast { position: fixed; left: 50%; bottom: 92px; transform: translateX(-50%); background: var(--ink); color: var(--inv); font-family: var(--ui); font-size: 14px; padding: 10px 16px; border-radius: 6px; z-index: 30; max-width: calc(100vw - 32px); }
+.proto { position: fixed; left: 50%; bottom: max(12px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 15; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: center; background: var(--card); border: 1px dashed var(--ink-2); border-radius: 8px; padding: 6px 8px; font-family: var(--ui); font-size: 11px; max-width: calc(100vw - 24px); width: max-content; }
+.proto b { letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); font-size: 10px; padding-inline: 4px; }
+.proto button { min-height: 32px; padding: 4px 10px; font-size: 12px; }
+@media (max-width: 520px) { .card, .hero { padding: 24px 20px; } .pile { padding-inline: 18px; } .mag { grid-template-columns: 1fr; } .mag .page { aspect-ratio: auto; min-height: 210px; } .mag .cover { max-width: 190px; aspect-ratio: 5 / 7; } .top { gap: 8px; } .top:has(.nav) .brand span { display: none; } }
+@media (prefers-reduced-motion: reduce) { .ob .card, .sheet { animation: none; } .bar > i, .sw::after { transition: none; } }
+</style>
+
+<div id="app"></div>
+<div id="proto" class="proto" role="group" aria-label="Prototype controls"></div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+(function () {
+  'use strict';
+  var NOW = new Date();
+  var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  var LOOKS = {
+    broadsheet: { name: 'Broadsheet', note: 'Serif headlines, ink black', d: "'Fraunces', Georgia, serif", b: "'Source Serif 4', Georgia, serif", a: '#151412' },
+    fieldnotes: { name: 'Field Notes', note: 'Clean sans, burnt orange', d: "'DM Sans', system-ui, sans-serif", b: "'DM Sans', system-ui, sans-serif", a: '#d9480f' },
+    zine: { name: 'Zine', note: 'Mono headlines, blue', d: "'Space Mono', ui-monospace, monospace", b: "'Source Serif 4', Georgia, serif", a: '#1d4ed8' }
+  };
+  var SENDERS = ['Weekly Systems', 'The Margin Note', 'Deep Stack Weekly', 'Sunday Letter', 'Field Report'];
+  var SAMPLE = [
+    { id: 1, t: 'Why most dashboards go unread', s: 'Weekly Systems', m: 9, v: 'Gmail' },
+    { id: 2, t: 'A field guide to quiet software', s: 'The Margin Note', m: 12, v: 'Gmail' },
+    { id: 3, t: 'What the compiler knows that you don’t', s: 'Deep Stack Weekly', m: 15, v: 'Gmail' },
+    { id: 4, t: 'Notes on making a thing last', s: 'Sunday Letter', m: 7, v: 'Email' },
+    { id: 5, t: 'The case for a four-day reading week', s: 'Field Report', m: 11, v: 'Gmail' },
+    { id: 6, t: 'How rail timetables got so good', s: 'news.ycombinator.com', m: 14, v: 'Web' },
+    { id: 7, t: 'Small tools, long lives', s: 'The Margin Note', m: 6, v: 'Gmail' }
+  ];
+  var S = {
+    view: 'onboarding', step: 0, edit: null,
+    gmail: { state: 'idle', senders: SENDERS.map(function (n) { return { n: n, on: true }; }) },
+    paper: 'booklet', look: 'broadsheet',
+    first: { state: 'idle', pct: 0, label: '', links: [] },
+    sched: { on: true, days: [6], hour: 8, budget: 45 },
+    printer: { state: 'none', name: '' },
+    pile: [], picked: {}, brew: { open: false, state: 'idle', pct: 0, target: 'pdf' }, linkDraft: ''
+  };
+
+  /* ---------- helpers ---------- */
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function $(id) { return document.getElementById(id); }
+  function fmtHour(h) { return (h % 12 || 12) + ':00 ' + (h < 12 ? 'am' : 'pm'); }
+  function nextRun() {
+    if (!S.sched.on || !S.sched.days.length) return null;
+    for (var o = 0; o < 8; o++) {
+      var d = new Date(NOW); d.setDate(NOW.getDate() + o); d.setHours(S.sched.hour, 0, 0, 0);
+      if (S.sched.days.indexOf((d.getDay() + 6) % 7) > -1 && d > NOW) return d;
+    }
+    return null;
+  }
+  function runLabel(d) {
+    var wd = d.toLocaleDateString('en-GB', { weekday: 'long' });
+    var days = Math.round((new Date(d).setHours(0, 0, 0, 0) - new Date(NOW).setHours(0, 0, 0, 0)) / 864e5);
+    var rel = days === 0 ? 'today' : days === 1 ? 'tomorrow' : 'in ' + days + ' days';
+    return { when: wd + ' at ' + fmtHour(S.sched.hour), rel: rel, short: wd + ' ' + fmtHour(S.sched.hour) };
+  }
+  function schedSummary() {
+    if (!S.sched.on || !S.sched.days.length) return 'Off. You brew by hand.';
+    var names = S.sched.days.slice().sort().map(function (i) { return DAYS[i]; });
+    return names.join(', ') + ' at ' + fmtHour(S.sched.hour);
+  }
+  function chosen() {
+    if (S.sched.on) {
+      var out = [], used = 0;
+      S.pile.forEach(function (a) { if (used + a.m <= S.sched.budget || !out.length) { out.push(a); used += a.m; } });
+      return out;
+    }
+    return S.pile.filter(function (a) { return S.picked[a.id]; });
+  }
+  function minutes(list) { return list.reduce(function (n, a) { return n + a.m; }, 0); }
+  function hostOf(u) { try { return new URL(/^https?:/.test(u) ? u : 'https://' + u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } }
+  function toast(msg) {
+    var t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.h);
+    toast.h = setTimeout(function () { t.hidden = true; }, 2600);
+  }
+  var TICK = '<svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7.5 12.5l3 3 6-6.5"/></svg>';
+  var OPEN = '<svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="opacity:.35"><circle cx="12" cy="12" r="10"/></svg>';
+  var LOGO = '<svg width="30" height="30" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 4h24"/><rect x="16" y="8" width="32" height="46" rx="4"/><circle cx="32" cy="15" r="3.5"/><path d="M25 22h14v3a3 3 0 0 1-3 3h-8a3 3 0 0 1-3-3z"/><path d="M39 24.5h14"/><path d="M29.5 28h5l-1 3h-3z"/><path d="M22 58h20"/><path d="M26 44h12l-1.5 9h-9z"/></svg>';
+
+  /* ---------- magazine preview ---------- */
+  function lookVars(k) { var l = LOOKS[k]; return '--d:' + l.d + ';--b:' + l.b + ';--a:' + l.a; }
+  function magazine(k, titles, mins) {
+    var date = NOW.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase();
+    var heads = titles.slice(0, 4).map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('');
+    var first = esc(titles[0] || 'Why most dashboards go unread');
+    var bars = '<div class="tx">A dashboard is a promise that someone will look. Most teams keep the promise for a week, then the tab joins forty others. The ones that last are built around a single decision, not a single screen.</div>';
+    var left = '<div class="page" style="' + lookVars(k) + '"><div class="kick">Essay</div><h4>' + first + '</h4>' + bars + bars + '</div>';
+    var right = '<div class="page" style="' + lookVars(k) + '"><div class="quote">Built around a single decision, not a single screen.</div>' + bars + bars + '</div>';
+    return '<div class="mag"><div class="page cover" style="' + lookVars(k) + '"><div><div class="bar-a"></div><div class="meta" style="margin-top:6px">Issue No. 1 · ' + date + '</div></div><div class="t">Your reading, on paper</div><ul>' + heads + '</ul><div class="meta">' + titles.length + ' articles · ' + mins + ' min</div></div><div class="spread">' + left + right + '</div></div>';
+  }
+  function paperIcon(kind) {
+    if (kind === 'booklet') return '<svg class="mini" viewBox="0 0 96 56" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="6" y="4" width="40" height="48" rx="1.5"/><rect x="50" y="4" width="40" height="48" rx="1.5"/><path d="M13 14h26M13 20h26M13 26h18M57 14h26M57 20h26M57 26h18" opacity=".5"/></svg>';
+    return '<svg class="mini" viewBox="0 0 96 56" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="28" y="4" width="40" height="48" rx="1.5"/><path d="M35 14h26M35 20h26M35 26h26M35 32h16" opacity=".5"/></svg>';
+  }
+
+  /* ---------- onboarding cards ---------- */
+  var STEPS = 5;
+  function dots(n) {
+    var s = ''; for (var i = 1; i <= STEPS; i++) s += '<i class="' + (i <= n ? 'on' : '') + '"></i>';
+    return '<div class="dots" role="img" aria-label="Step ' + n + ' of ' + STEPS + '">' + s + '<span>Step ' + n + ' of ' + STEPS + '</span></div>';
+  }
+  function beatsIcon(kind) {
+    var p = {
+      save: '<rect x="8" y="9" width="28" height="26" rx="3"/><path d="M8 17l14 9 14-9"/>',
+      brew: '<rect x="9" y="6" width="26" height="32" rx="2"/><path d="M15 15h14M15 21h14M15 27h8"/>',
+      print: '<path d="M13 16V7h18v9"/><rect x="6" y="16" width="32" height="14" rx="2"/><rect x="13" y="25" width="18" height="12"/>'
+    }[kind];
+    return '<svg viewBox="0 0 44 44" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + '</svg>';
+  }
+  function cardWelcome() {
+    return {
+      body: '<div class="eyebrow">Welcome to Paperbrew</div><h1>Read what you saved, on paper.</h1><p class="muted">You save more than you read. Paperbrew turns those saves into a magazine you read away from screens. Setup takes about three minutes.</p>' +
+        '<ul class="beats"><li>' + beatsIcon('save') + '<div><h3>Save</h3><p class="muted small">Newsletters and links collect in a pile, not in your inbox.</p></div></li>' +
+        '<li>' + beatsIcon('brew') + '<div><h3>Brew</h3><p class="muted small">Paperbrew lays the pile out as a magazine, by hand or on a schedule.</p></div></li>' +
+        '<li>' + beatsIcon('print') + '<div><h3>Print</h3><p class="muted small">Download it, or let it print itself on your home printer.</p></div></li></ul>',
+      foot: '<button class="primary block" data-a="next">Get started</button>', dots: 0
+    };
+  }
+  function cardGmail() {
+    var g = S.gmail, body;
+    if (g.state === 'connected') {
+      var on = g.senders.filter(function (s) { return s.on; }).length;
+      body = '<h2>Newsletters found</h2><p class="muted">Connected as <b>you@gmail.com</b>. Pick the senders Paperbrew may save from. <span class="small">(Example senders.)</span></p><ul class="list">' +
+        g.senders.map(function (s, i) { return '<li><span class="grow">' + esc(s.n) + '</span><button class="sw" role="switch" aria-checked="' + s.on + '" aria-label="Save from ' + esc(s.n) + '" data-a="sender" data-i="' + i + '"></button></li>'; }).join('') +
+        '</ul><p class="muted small">' + on + ' of ' + g.senders.length + ' on. Only mail that arrives from now on is saved. Paperbrew never sends or deletes email.</p>';
+    } else {
+      body = '<h2>Where do your reads come from?</h2><p class="muted">Connect Gmail and Paperbrew saves the newsletters you already get. It reads mail, it never sends or changes it.</p>' +
+        '<button class="primary block" data-a="gmail" ' + (g.state === 'connecting' ? 'disabled' : '') + '>' + (g.state === 'connecting' ? 'Connecting…' : 'Connect Gmail') + '</button>' +
+        '<div class="small muted" style="text-align:center">or save by hand</div><div><div class="small muted" style="margin-bottom:6px">Forward anything to your private address:</div><div class="addr"><code>quiet-maple-river@cloudmailin.net</code><button class="sm" data-a="copy">Copy</button></div></div>';
+    }
+    return { body: body, foot: '<button class="ghost" data-a="back">Back</button><span class="grow"></span><button class="primary" data-a="next">' + (g.state === 'connected' ? 'Continue' : 'Skip for now') + '</button>', dots: 1 };
+  }
+  function cardLook() {
+    var paper = '<div class="choices">' + [['booklet', 'Booklet', 'A5 pages folded from A4. Two-sided printer.'], ['flat', 'Flat A4', 'Loose pages, one or two sided.']].map(function (p) {
+      return '<button class="choice" aria-pressed="' + (S.paper === p[0]) + '" data-a="paper" data-v="' + p[0] + '">' + paperIcon(p[0]) + '<b>' + p[1] + '</b><span>' + p[2] + '</span></button>';
+    }).join('') + '</div>';
+    var looks = '<div class="choices">' + Object.keys(LOOKS).map(function (k) {
+      var l = LOOKS[k];
+      return '<button class="choice" aria-pressed="' + (S.look === k) + '" data-a="look" data-v="' + k + '"><span style="font-family:' + l.d + ';font-size:28px;font-weight:700;color:' + (S.look === k || true ? 'var(--ink)' : '') + ';line-height:1">Aa <i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + l.a + ';vertical-align:middle"></i></span><b>' + l.name + '</b><span>' + l.note + '</span></button>';
+    }).join('') + '</div>';
+    var titles = SAMPLE.slice(0, 4).map(function (a) { return a.t; });
+    return {
+      body: '<h2>How should it look?</h2><p class="muted">You can change this any time, for every issue.</p><div><div class="eyebrow" style="margin-bottom:8px">Paper</div>' + paper + '</div><div><div class="eyebrow" style="margin-bottom:8px">Style</div>' + looks + '</div>' +
+        '<div aria-label="Preview of your magazine">' + magazine(S.look, titles, 41) + '</div>',
+      foot: '<button class="ghost" data-a="back">Back</button><span class="grow"></span><button class="primary" data-a="next">Continue</button>', dots: 2
+    };
+  }
+  var BREW_LABELS = ['Collecting articles', 'Setting the type', 'Laying out pages', S_paperLabel];
+  function S_paperLabel() { return S.paper === 'booklet' ? 'Folding the booklet' : 'Numbering the pages'; }
+  function firstTitles() { return S.first.links.map(function (l) { return 'From ' + l; }).concat(SAMPLE.map(function (a) { return a.t; })); }
+  function cardFirst() {
+    var f = S.first, body, foot;
+    var links = f.links.length ? '<ul class="list">' + f.links.map(function (l) { return '<li><span class="grow">' + esc(l) + '</span><span class="tag in">Your link</span></li>'; }).join('') + '</ul>' : '';
+    if (f.state === 'idle') {
+      body = '<h2>Brew your first issue</h2><p class="muted">Your pile is empty because newsletters are saved from now on. So you can see what you’ll hold, Paperbrew brews a sample. Add a real link and it goes in too.</p>' +
+        '<div class="row"><input class="field" id="linkIn" type="url" inputmode="url" placeholder="Paste an article link" aria-label="Article link" value="' + esc(S.linkDraft) + '"><button data-a="addlink">Add</button></div>' + links +
+        '<p class="small muted">Sample issue: ' + SAMPLE.length + ' example articles, about ' + minutes(SAMPLE) + ' minutes.</p>';
+      foot = '<button class="ghost" data-a="back">Back</button><span class="grow"></span><button class="primary" data-a="brewfirst">Brew first issue</button>';
+    } else if (f.state === 'brewing') {
+      body = '<h2>Brewing…</h2><div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + f.pct + '"><i style="width:' + f.pct + '%"></i></div><p class="muted" id="brewLabel">' + esc(f.label) + '</p>';
+      foot = '';
+    } else {
+      var t = firstTitles();
+      body = '<div class="eyebrow">First issue</div><h2>That’s your magazine.</h2><p class="muted">Download the PDF and print it two-sided, or carry on and let Paperbrew do it for you.</p>' + magazine(S.look, t, minutes(SAMPLE) + f.links.length * 8) +
+        '<button class="block" data-a="pdf">Download PDF</button>';
+      foot = '<button class="ghost" data-a="back">Back</button><span class="grow"></span><button class="primary" data-a="next">Continue</button>';
+    }
+    return { body: body, foot: foot, dots: 3 };
+  }
+  function schedControls() {
+    var s = S.sched;
+    return '<div><div class="eyebrow" style="margin-bottom:8px">Days</div><div class="chips">' + DAYS.map(function (d, i) { return '<button class="chip" aria-pressed="' + (s.days.indexOf(i) > -1) + '" data-a="day" data-i="' + i + '">' + d + '</button>'; }).join('') + '</div></div>' +
+      '<div><label class="eyebrow" for="hour" style="display:block;margin-bottom:8px">Time</label><select class="field" id="hour" style="max-width:180px">' + [5, 6, 7, 8, 9, 10, 12, 14, 17, 18, 19, 20, 21].map(function (h) { return '<option value="' + h + '"' + (s.hour === h ? ' selected' : '') + '>' + fmtHour(h) + '</option>'; }).join('') + '</select></div>' +
+      '<div><label class="eyebrow" for="budget" style="display:block;margin-bottom:4px">How much to read: <span id="budgetVal" style="text-transform:none;letter-spacing:0;font-size:14px;color:var(--ink)">' + s.budget + ' minutes</span></label><input type="range" id="budget" min="15" max="120" step="5" value="' + s.budget + '"><div class="small muted">About ' + Math.round(s.budget / 2.5) + ' pages. The newest articles are picked until the issue is full.</div></div>' +
+      '<div class="callout" aria-live="polite" id="nextCallout">' + nextCalloutInner() + '</div>';
+  }
+  function nextCalloutInner() {
+    var d = nextRun();
+    if (!d) return '<span class="eyebrow">Your next paper</span><span class="big">Pick at least one day</span>';
+    var r = runLabel(d);
+    return '<span class="eyebrow">Your next paper</span><span class="big">' + r.when + '</span><span class="muted small">' + r.rel.charAt(0).toUpperCase() + r.rel.slice(1) + '. Whatever you’ve saved by then goes in.</span>';
+  }
+  function cardSchedule() {
+    return {
+      body: '<h2>When do you read?</h2><p class="muted">Pick your moments once. Sunday morning, the night before a flight, weekdays at 7.</p>' + schedControls(),
+      foot: '<button class="ghost" data-a="nosched">I’ll brew by hand</button><span class="grow"></span><button class="primary" data-a="next" ' + (S.sched.days.length ? '' : 'disabled') + '>Continue</button>', dots: 4
+    };
+  }
+  function cardPrinter() {
+    var p = S.printer, body;
+    if (p.state === 'connected') {
+      body = '<h2>Your Mac is ready</h2><div class="callout"><span class="eyebrow">Connected</span><span class="big">' + esc(p.name) + '</span><span class="muted small">Issues print here on schedule. Keep the printer on and stocked with paper.</span></div>';
+    } else if (p.state === 'pairing') {
+      body = '<h2>Waiting for the Paperbrew app…</h2><div class="bar" role="progressbar"><i style="width:60%"></i></div><p class="muted">Allow the browser to open Paperbrew when it asks.</p>';
+    } else {
+      body = '<h2>Where should it print?</h2><p class="muted">A small Mac app prints your issues on the printer already at home, any brand. Install it once, then click connect.</p>' +
+        '<a class="btn block" href="#printer" data-a="dl">Download for Mac</a><button class="primary block" data-a="pair">Connect this Mac</button>' +
+        (S.sched.on ? '<div class="warn"><b>No Mac, no schedule.</b> Scheduled issues only brew while a Mac is connected. You can still brew by hand and download the PDF.</div>' : '');
+    }
+    return { body: body, foot: '<button class="ghost" data-a="back">Back</button><span class="grow"></span><button class="primary" data-a="next">' + (p.state === 'connected' ? 'Continue' : 'Do this later') + '</button>', dots: 5 };
+  }
+  function summaryRows() {
+    var on = S.gmail.senders.filter(function (s) { return s.on; }).length;
+    return [
+      ['Newsletters', S.gmail.state === 'connected' ? on + ' senders from Gmail' : 'Not connected', S.gmail.state === 'connected', 1],
+      ['Look', LOOKS[S.look].name + ', ' + (S.paper === 'booklet' ? 'booklet' : 'flat A4'), true, 2],
+      ['Schedule', schedSummary(), S.sched.on && S.sched.days.length > 0, 4],
+      ['Printer', S.printer.state === 'connected' ? S.printer.name : 'Not connected', S.printer.state === 'connected', 5]
+    ];
+  }
+  function cardDone() {
+    var rows = summaryRows().map(function (r) { return '<li>' + (r[2] ? TICK : OPEN) + '<span class="grow"><b style="font-family:var(--ui);font-size:14px">' + r[0] + '</b><br><span class="muted small">' + esc(r[1]) + '</span></span></li>'; }).join('');
+    var d = nextRun(), tail;
+    if (d && S.printer.state === 'connected') tail = 'Your first paper prints ' + runLabel(d).short + '.';
+    else if (d) tail = 'Connect a Mac to start the schedule. Until then you can brew by hand.';
+    else tail = 'You brew by hand whenever you like.';
+    return { body: '<div class="eyebrow">All set</div><h1>You’re ready to brew.</h1><ul class="list">' + rows + '</ul><p class="muted">' + tail + '</p>', foot: '<button class="primary block" data-a="finish">Open my desk</button>', dots: 0 };
+  }
+  var CARDS = [cardWelcome, cardGmail, cardLook, cardFirst, cardSchedule, cardPrinter, cardDone];
+
+  function renderOnboarding() {
+    var step = S.edit !== null ? S.edit : S.step;
+    var c = CARDS[step]();
+    var foot = c.foot;
+    if (S.edit !== null) foot = '<button class="ghost" data-a="cancel-edit">Cancel</button><span class="grow"></span><button class="primary" data-a="save-edit">Save</button>';
+    var head = S.edit !== null ? '' : (c.dots ? dots(c.dots) : '<div class="dots" style="height:19px"></div>');
+    return '<main class="ob" id="main" tabindex="-1">' + head + '<section class="card" aria-live="polite">' + c.body + (foot ? '<div class="foot">' + foot + '</div>' : '') + '</section></main>';
+  }
+
+  /* ---------- the desk ---------- */
+  function railCard() {
+    var rows = summaryRows();
+    var action = { 0: '', 1: ['Connect', 1], 2: ['Change', 2], 3: ['', 0], 4: ['Set up', 4], 5: ['Connect', 5] };
+    var items = [rows[0], rows[2], rows[3]].map(function (r) {
+      var label = r[2] ? 'Change' : (r[0] === 'Schedule' ? 'Set up' : 'Connect');
+      return '<li>' + (r[2] ? TICK : OPEN) + '<span class="grow"><b>' + r[0] + '</b><br><span class="st">' + esc(r[1]) + '</span></span><button class="sm" data-a="edit" data-i="' + r[3] + '">' + label + '</button></li>';
+    }).join('');
+    var look = '<li>' + TICK + '<span class="grow"><b>Look</b><br><span class="st">' + esc(rows[1][1]) + '</span></span><button class="sm" data-a="edit" data-i="2">Change</button></li>';
+    return '<section class="card rail"><h3>Your setup</h3><ul class="list">' + items + look + '</ul></section>';
+  }
+  function heroCard() {
+    var list = chosen(), mins = minutes(list), sched = S.sched.on, hasPile = S.pile.length > 0;
+    var d = nextRun(), printerOk = S.printer.state === 'connected';
+    var stats = hasPile ? '<div class="stats"><span>' + list.length + ' article' + (list.length === 1 ? '' : 's') + '</span><span>about ' + mins + ' min of reading</span><span>' + (S.paper === 'booklet' ? 'Booklet' : 'Flat A4') + ', ' + LOOKS[S.look].name + '</span></div>' : '';
+    var bar = sched && hasPile ? '<div><div class="bar" aria-hidden="true"><i style="width:' + Math.min(100, Math.round(mins / S.sched.budget * 100)) + '%"></i></div><div class="small muted" style="margin-top:6px">' + mins + ' of ' + S.sched.budget + ' minutes</div></div>' : '';
+    var eyebrow, title, actions = '', warn = '';
+    if (sched) {
+      var r = d ? runLabel(d) : null;
+      eyebrow = printerOk ? (r ? 'Prints ' + r.rel : 'Scheduled') : 'Paused';
+      title = printerOk ? (r ? r.when : 'Pick a day') : 'Waiting for a Mac';
+      if (!printerOk) warn = '<div class="warn"><span>Scheduled issues only brew while a Mac is connected, so nothing will print yet.</span><button class="sm" data-a="edit" data-i="5">Connect a Mac</button></div>';
+      actions = (hasPile ? '<button data-a="brewopen">Brew now instead</button>' : '') + '<button class="ghost" data-a="edit" data-i="4">Edit schedule</button>';
+    } else {
+      eyebrow = 'Manual';
+      title = hasPile ? 'Ready when you are' : 'Your pile is empty';
+      actions = (hasPile ? '<button class="primary" data-a="brewopen" ' + (list.length ? '' : 'disabled') + '>Brew now</button>' : '') + '<button class="ghost" data-a="edit" data-i="4">Print on a schedule instead</button>';
+    }
+    return '<section class="card hero"><div class="eyebrow">' + eyebrow + '</div><h1>' + title + '</h1>' + stats + bar + warn + '<div class="actions">' + actions + '</div></section>';
+  }
+  function pileCard() {
+    var inIssue = {}; chosen().forEach(function (a) { inIssue[a.id] = true; });
+    var head = '<div class="head"><h2>Reading pile</h2><span class="muted small">' + S.pile.length + ' saved</span></div>';
+    var add = '<div class="row" style="padding-block:6px 14px"><input class="field" id="linkIn" type="url" inputmode="url" placeholder="Paste a link to save an article" aria-label="Article link" value="' + esc(S.linkDraft) + '"><button data-a="addlink">Save</button></div>';
+    if (!S.pile.length) {
+      return '<section class="card pile">' + head + add + '<div class="empty"><h3>Nothing saved yet</h3><p class="muted" style="max-width:36ch">Newsletters land here as they arrive' + (S.gmail.state === 'connected' ? ' in Gmail' : '') + '. Forward an email or paste a link to add one now.</p></div></section>';
+    }
+    var hint = S.sched.on ? '<p class="small muted" style="padding-bottom:10px">Picked newest first to fit your ' + S.sched.budget + ' minutes. Turn off the schedule to choose by hand.</p>' : '<p class="small muted" style="padding-bottom:10px">Tick the articles for your next issue.</p>';
+    var rows = S.pile.map(function (a) {
+      var lead = S.sched.on ? '<span class="tag ' + (inIssue[a.id] ? 'in' : '') + '">' + (inIssue[a.id] ? 'In issue' : 'Next time') + '</span>' : '<label class="hit"><input type="checkbox" data-a="pick" data-i="' + a.id + '" aria-label="Include ' + esc(a.t) + '" ' + (S.picked[a.id] ? 'checked' : '') + '></label>';
+      var left = S.sched.on ? '<span></span>' : lead;
+      return '<div class="art">' + (S.sched.on ? '<span style="width:0"></span>' : left) + '<div style="min-width:0"><div class="ti">' + esc(a.t) + '</div><div class="sub">' + esc(a.s) + ' · ' + a.m + ' min · via ' + a.v + '</div></div>' + (S.sched.on ? lead : '<button class="sm ghost" data-a="remove" data-i="' + a.id + '" aria-label="Remove ' + esc(a.t) + '">Remove</button>') + '</div>';
+    }).join('');
+    return '<section class="card pile">' + head + hint + add + rows + '</section>';
+  }
+  function schedRail() {
+    return '<section class="card rail"><h3>Brewing</h3><div class="sched-switch" style="padding-top:8px"><button class="sw" role="switch" aria-checked="' + S.sched.on + '" aria-label="Brew on a schedule" data-a="togglesched"></button><div><b>' + (S.sched.on ? 'On a schedule' : 'By hand') + '</b><br><span class="st">' + esc(schedSummary()) + '</span></div></div></section>';
+  }
+  function renderDesk() {
+    return '<main class="shell desk" id="main" tabindex="-1"><div class="stack">' + heroCard() + pileCard() + '</div><div class="stack">' + schedRail() + railCard() + '</div></main>';
+  }
+  function renderIssues() {
+    var d1 = new Date(NOW); d1.setDate(d1.getDate() - 7);
+    var d2 = new Date(NOW); d2.setDate(d2.getDate() - 14);
+    var f = function (d) { return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }); };
+    return '<main class="shell" id="main" tabindex="-1" style="max-width:720px"><section class="card"><h2>Issues</h2><ul class="list">' +
+      [['Issue No. 3', f(d1), '5 articles · 43 min', 'Printed', true], ['Issue No. 2', f(d2), '4 articles · 38 min', 'Downloaded', true], ['Issue No. 1', f(d2), 'Sample issue', 'Downloaded', true]].map(function (r) {
+        return '<li><span class="grow"><b style="font-family:var(--ui);font-size:15px">' + r[0] + '</b><br><span class="muted small">' + r[1] + ' · ' + r[2] + '</span></span><span class="tag in">' + r[3] + '</span></li>';
+      }).join('') + '</ul><p class="small muted">Example history.</p></section></main>';
+  }
+  function renderSettings() {
+    var rows = summaryRows();
+    return '<main class="shell" id="main" tabindex="-1" style="max-width:720px"><section class="card"><h2>Settings</h2><p class="muted">Each part opens as a single card, the same way it did in setup.</p><ul class="list">' +
+      rows.map(function (r) { return '<li>' + (r[2] ? TICK : OPEN) + '<span class="grow"><b style="font-family:var(--ui);font-size:15px">' + r[0] + '</b><br><span class="muted small">' + esc(r[1]) + '</span></span><button class="sm" data-a="edit" data-i="' + r[3] + '">Change</button></li>'; }).join('') + '</ul></section></main>';
+  }
+  function topbar() {
+    var nav = [['desk', 'Desk'], ['issues', 'Issues'], ['settings', 'Settings']].map(function (n) { return '<button data-a="nav" data-v="' + n[0] + '"' + (S.view === n[0] ? ' aria-current="page"' : '') + '>' + n[1] + '</button>'; }).join('');
+    return '<header class="top"><div class="brand">' + LOGO + '<span>Paperbrew</span></div>' + (S.view === 'onboarding' ? '' : '<nav class="nav" aria-label="Main">' + nav + '</nav>') + '</header>';
+  }
+  function brewSheet() {
+    var b = S.brew; if (!b.open) return '';
+    var list = chosen(), mins = minutes(list), printerOk = S.printer.state === 'connected', inner;
+    if (b.state === 'idle') {
+      inner = '<h2>Brew this issue</h2><p class="muted">' + list.length + ' articles, about ' + mins + ' minutes, as a ' + (S.paper === 'booklet' ? 'booklet' : 'flat A4 issue') + ' in ' + LOOKS[S.look].name + '.</p>' +
+        '<div class="actions" style="display:flex;flex-direction:column;gap:10px"><button class="primary block" data-a="brewgo" data-v="pdf">Download PDF</button><button class="block" data-a="brewgo" data-v="print" ' + (printerOk ? '' : 'disabled') + '>Print on my Mac</button>' + (printerOk ? '' : '<p class="small muted">Connect a Mac to print from here.</p>') + '</div><div class="foot"><button class="ghost" data-a="brewclose">Cancel</button></div>';
+    } else if (b.state === 'brewing') {
+      inner = '<h2>Brewing…</h2><div class="bar"><i style="width:' + b.pct + '%"></i></div><p class="muted" id="brewLabel2">Collecting articles</p>';
+    } else {
+      inner = '<h2>' + (b.target === 'print' ? 'Sent to your printer' : 'Your PDF is ready') + '</h2><p class="muted">' + (b.target === 'print' ? 'It prints in about a minute. The articles move to Issues.' : 'In the real app the download starts now. The articles move to Issues.') + '</p><button class="primary block" data-a="brewdone">Done</button>';
+    }
+    return '<div class="scrim"><div class="sheet" role="dialog" aria-modal="true" aria-label="Brew this issue">' + inner + '</div></div>';
+  }
+
+  function protoBar() {
+    $('proto').innerHTML = '<b>Prototype</b><button data-a="restart">Restart setup</button><button data-a="skipapp">Skip to desk</button>' + (S.view === 'desk' ? '<button data-a="simmail">Newsletters arrive</button><button data-a="clearpile">Empty pile</button>' : '');
+  }
+
+  function render() {
+    var main = S.view === 'onboarding' ? renderOnboarding() : S.view === 'desk' ? renderDesk() : S.view === 'issues' ? renderIssues() : renderSettings();
+    var active = document.activeElement && document.activeElement.id;
+    $('app').innerHTML = topbar() + main + brewSheet();
+    protoBar();
+    if (active === 'linkIn' && $('linkIn')) { $('linkIn').focus(); }
+  }
+
+  /* ---------- flows ---------- */
+  function runBrewFirst() {
+    var f = S.first; f.state = 'brewing'; f.pct = 0; render();
+    var steps = ['Collecting articles', 'Setting the type', 'Laying out pages', S_paperLabel()], i = 0;
+    (function tick() {
+      f.pct = Math.min(100, (i + 1) * 25); f.label = steps[i] + '…'; render(); i++;
+      if (i < steps.length) setTimeout(tick, 700); else setTimeout(function () { f.state = 'done'; render(); }, 600);
+    })();
+  }
+  function runBrewSheet(target) {
+    var b = S.brew; b.state = 'brewing'; b.pct = 0; b.target = target; render();
+    var i = 0; (function tick() { b.pct = (i + 1) * 25; render(); i++; if (i < 4) setTimeout(tick, 550); else setTimeout(function () { b.state = 'done'; render(); }, 450); })();
+  }
+  function fillPile() {
+    S.pile = SAMPLE.slice(); S.picked = {}; SAMPLE.slice(0, 4).forEach(function (a) { S.picked[a.id] = true; });
+  }
+  function afterEdit() { S.edit = null; S.view = S.returnTo || 'desk'; render(); }
+
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-a]'); if (!el) return;
+    var a = el.getAttribute('data-a'), i = +el.getAttribute('data-i'), v = el.getAttribute('data-v');
+    if (a === 'dl') { e.preventDefault(); toast('In the real app this downloads the .dmg.'); return; }
+    switch (a) {
+      case 'next': S.step = Math.min(CARDS.length - 1, S.step + 1); break;
+      case 'back': S.step = Math.max(0, S.step - 1); break;
+      case 'gmail': S.gmail.state = 'connecting'; render(); setTimeout(function () { S.gmail.state = 'connected'; render(); }, 1000); return;
+      case 'sender': S.gmail.senders[i].on = !S.gmail.senders[i].on; break;
+      case 'copy': try { navigator.clipboard.writeText('quiet-maple-river@cloudmailin.net').then(function () { toast('Address copied'); }, function () { toast('Select the address and copy it'); }); } catch (x) { toast('Select the address and copy it'); } return;
+      case 'paper': S.paper = v; break;
+      case 'look': S.look = v; break;
+      case 'addlink':
+        var val = ($('linkIn') && $('linkIn').value || '').trim(), h = hostOf(val);
+        if (!h) { toast('Paste a full link, like https://example.com/article'); return; }
+        S.linkDraft = '';
+        if (S.view === 'onboarding') S.first.links.push(h); else { S.pile.unshift({ id: Date.now(), t: 'Article from ' + h, s: h, m: 8, v: 'Web' }); S.picked[S.pile[0].id] = true; toast('Saved to your pile'); }
+        break;
+      case 'brewfirst': runBrewFirst(); return;
+      case 'pdf': toast('In the real app the PDF downloads now.'); return;
+      case 'day': var ix = S.sched.days.indexOf(i); if (ix > -1) S.sched.days.splice(ix, 1); else S.sched.days.push(i); S.sched.on = true; break;
+      case 'nosched': S.sched.on = false; S.step = 5; break;
+      case 'pair': S.printer.state = 'pairing'; render(); setTimeout(function () { S.printer = { state: 'connected', name: 'Brother HL-L2350DW' }; render(); }, 1600); return;
+      case 'finish': S.view = 'desk'; S.step = 0; toast('Pile is empty, as it would be. Try "Newsletters arrive" below.'); break;
+      case 'nav': S.view = v; break;
+      case 'edit': S.returnTo = S.view; S.edit = i; S.view = 'onboarding'; if (i === 4 && !S.sched.days.length) S.sched.days = [6]; S.sched.on = i === 4 ? true : S.sched.on; break;
+      case 'save-edit': case 'cancel-edit': afterEdit(); return;
+      case 'togglesched': S.sched.on = !S.sched.on; if (S.sched.on && !S.sched.days.length) S.sched.days = [6]; break;
+      case 'pick': S.picked[i] = !S.picked[i]; break;
+      case 'remove': S.pile = S.pile.filter(function (x) { return x.id !== i; }); break;
+      case 'brewopen': S.brew = { open: true, state: 'idle', pct: 0, target: 'pdf' }; break;
+      case 'brewclose': case 'brewdone': S.brew.open = false; if (a === 'brewdone') { var used = chosen().map(function (x) { return x.id; }); S.pile = S.pile.filter(function (x) { return used.indexOf(x.id) < 0; }); toast('Moved to Issues'); } break;
+      case 'brewgo': runBrewSheet(v); return;
+      case 'restart': S = freshState(); break;
+      case 'skipapp': S = freshState(); S.view = 'desk'; S.gmail.state = 'connected'; S.printer = { state: 'connected', name: 'Brother HL-L2350DW' }; fillPile(); break;
+      case 'simmail': fillPile(); toast('Five newsletters and two links arrived'); break;
+      case 'clearpile': S.pile = []; S.picked = {}; break;
+    }
+    render();
+    if (a === 'next' || a === 'back' || a === 'finish' || a === 'nav' || a === 'edit' || a === 'restart' || a === 'skipapp') window.scrollTo(0, 0);
+  });
+  document.addEventListener('input', function (e) {
+    if (e.target.id === 'budget') {
+      S.sched.budget = +e.target.value; $('budgetVal').textContent = S.sched.budget + ' minutes';
+    } else if (e.target.id === 'linkIn') { S.linkDraft = e.target.value; }
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target.id === 'hour') { S.sched.hour = +e.target.value; $('nextCallout').innerHTML = nextCalloutInner(); }
+    if (e.target.id === 'budget') render();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && S.brew.open && S.brew.state !== 'brewing') { S.brew.open = false; render(); }
+    if (e.key === 'Enter' && e.target.id === 'linkIn') { e.preventDefault(); var b = document.querySelector('[data-a="addlink"]'); if (b) b.click(); }
+  });
+  function freshState() {
+    return {
+      view: 'onboarding', step: 0, edit: null,
+      gmail: { state: 'idle', senders: SENDERS.map(function (n) { return { n: n, on: true }; }) },
+      paper: 'booklet', look: 'broadsheet',
+      first: { state: 'idle', pct: 0, label: '', links: [] },
+      sched: { on: true, days: [6], hour: 8, budget: 45 },
+      printer: { state: 'none', name: '' },
+      pile: [], picked: {}, brew: { open: false, state: 'idle', pct: 0, target: 'pdf' }, linkDraft: ''
+    };
+  }
+  render();
+})();
+</script>

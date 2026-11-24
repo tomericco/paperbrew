@@ -15,6 +15,11 @@ alter table users add column if not exists auth_user_id text unique;
 alter table users add column if not exists paper_layout text not null default 'flat';
 alter table users drop constraint if exists users_paper_layout_check;
 alter table users add constraint users_paper_layout_check check (paper_layout in ('flat', 'booklet'));
+alter table users add column if not exists paper_look text not null default 'broadsheet';
+alter table users drop constraint if exists users_paper_look_check;
+alter table users add constraint users_paper_look_check check (paper_look in ('broadsheet', 'fieldnotes', 'zine'));
+-- Set once, when the user finishes (or leaves) the guided onboarding.
+alter table users add column if not exists onboarded_at timestamptz;
 
 -- Each user gets a mailbox token (three random words, e.g. amber-otter-lantern),
 -- delivered to INBOUND_ADDRESS with {token} filled in.
@@ -134,6 +139,8 @@ create table if not exists gmail_connections (
   last_synced_at     timestamptz,
   last_error         text
 );
+-- Set when the one-off starter fetch (a few recent newsletters) has run, so a reconnect never repeats it.
+alter table gmail_connections add column if not exists starter_done_at timestamptz;
 
 -- Every message the classifier has seen, so each is judged once.
 create table if not exists gmail_messages (

@@ -13,14 +13,15 @@ import { passesBodyRules, passesMetadataRules, senderEmail } from './rules.js';
 export const MAX_PER_SYNC = 200;
 export const FALLBACK_QUERY = 'newer_than:2d -in:sent -in:chats -in:drafts';
 
-type Decision = 'rule_skip' | 'not_editorial' | 'editorial';
-type Deps = {
-  gmail?: typeof import('./client.js');
+export type Decision = 'rule_skip' | 'not_editorial' | 'editorial';
+export type GmailClient = typeof import('./client.js');
+export type Deps = {
+  gmail?: GmailClient;
   classify?: typeof classifyEmail;
   /** The runner's final try: a message that still fails is recorded as skipped so the sync can move on. */
   lastAttempt?: boolean;
 };
-type Stats = { seen: number; saved: number };
+export type Stats = { seen: number; saved: number };
 
 const RECORD_SQL = `insert into gmail_messages (user_id, gmail_message_id, decision, reason, from_email, subject)
                     values ($1, $2, $3, $4, $5, $6)
@@ -67,14 +68,71 @@ export async function syncGmail(userId: string, deps: Deps = {}): Promise<Stats>
     );
   } catch (err) {
     if (!(err instanceof GmailAuthError)) throw err;
-    // Guarded by the token this run started with: a reconnect meanwhile is a new connection, not this one.
-    await pool.query(
-      `update gmail_connections set status = 'needs_reconnect', last_error = $2
-       where user_id = $1 and refresh_token_enc = $3`,
-      [userId, err.message, conn.refresh_token_enc],
-    );
+    await flagNeedsReconnect(userId, err, conn.refresh_token_enc);
   }
   return stats;
+}
+
+/** Revoked access. Guarded by the token the run started with: a reconnect meanwhile is a new connection, not this one. */
+export async function flagNeedsReconnect(userId: string, err: GmailAuthError, tokenEnc: string): Promise<void> {
+  await pool.query(
+    `update gmail_connections set status = 'needs_reconnect', last_error = $2
+     where user_id = $1 and refresh_token_enc = $3`,
+    [userId, err.message, tokenEnc],
+  );
+}
+
+/** The ids, in order, that this user's gmail_messages has not recorded yet. */
+export async function unseenIds(userId: string, ids: string[]): Promise<string[]> {
+  const { rows } = await pool.query<{ gmail_message_id: string }>(
+    'select gmail_message_id from gmail_messages where user_id = $1 and gmail_message_id = any($2)',
+    [userId, ids],
+  );
+  const seen = new Set(rows.map((r) => r.gmail_message_id));
+  return ids.filter((id) => !seen.has(id));
+}
+
+export async function blockedSenders(userId: string): Promise<Set<string>> {
+  const { rows } = await pool.query<{ email: string }>('select email from gmail_blocked_senders where user_id = $1', [
+    userId,
+  ]);
+  return new Set(rows.map((r) => r.email));
+}
+
+/**
+ * Run processMessage over `ids` in order, counting into `stats`, and stop once `stats.saved` reaches `stopAt`.
+ * An error propagates (the runner retries), except on the last attempt: a message that keeps failing is then
+ * recorded as skipped ("error") and the loop carries on; after 3 failures in a row the error propagates.
+ * A GmailAuthError always propagates: it is about the connection, not the message.
+ */
+export async function processMessages(
+  userId: string,
+  token: string,
+  ids: string[],
+  opts: {
+    gmail: GmailClient;
+    classify: typeof classifyEmail;
+    blocked: Set<string>;
+    lastAttempt: boolean;
+    stats: Stats;
+    stopAt?: number;
+  },
+): Promise<void> {
+  const { gmail, classify, blocked, lastAttempt, stats, stopAt = Infinity } = opts;
+  let failuresInARow = 0;
+  for (const id of ids) {
+    if (stats.saved >= stopAt) return;
+    stats.seen++;
+    try {
+      if (await processMessage(userId, token, id, gmail, classify, blocked)) stats.saved++;
+      failuresInARow = 0;
+    } catch (err) {
+      if (!lastAttempt || err instanceof GmailAuthError) throw err;
+      if (++failuresInARow >= MAX_CONSECUTIVE_FAILURES) throw err;
+      console.warn(`[gmail] skipping message after repeated failures: ${(err as Error).message}`);
+      await pool.query(RECORD_SQL, recordParams(userId, id, 'rule_skip', 'error', null, null));
+    }
+  }
 }
 
 async function run(
@@ -82,7 +140,7 @@ async function run(
   tokenEnc: string,
   refreshToken: string,
   startHistoryId: string,
-  gmail: typeof import('./client.js'),
+  gmail: GmailClient,
   classify: typeof classifyEmail,
   lastAttempt: boolean,
   stats: Stats,
@@ -100,34 +158,10 @@ async function run(
     ids = await gmail.listMessages(token, FALLBACK_QUERY, MAX_PER_SYNC);
   }
 
-  const { rows: seenRows } = await pool.query<{ gmail_message_id: string }>(
-    'select gmail_message_id from gmail_messages where user_id = $1 and gmail_message_id = any($2)',
-    [userId, ids],
-  );
-  const seen = new Set(seenRows.map((r) => r.gmail_message_id));
-  const fresh = ids.filter((id) => !seen.has(id));
+  const fresh = await unseenIds(userId, ids);
   const batch = fresh.slice(0, MAX_PER_SYNC);
-
-  const { rows: blockedRows } = await pool.query<{ email: string }>(
-    'select email from gmail_blocked_senders where user_id = $1',
-    [userId],
-  );
-  const blocked = new Set(blockedRows.map((r) => r.email));
-
-  let failuresInARow = 0;
-  for (const id of batch) {
-    stats.seen++;
-    try {
-      if (await processMessage(userId, token, id, gmail, classify, blocked)) stats.saved++;
-      failuresInARow = 0;
-    } catch (err) {
-      // An auth error is about the connection, not the message: the caller handles it.
-      if (!lastAttempt || err instanceof GmailAuthError) throw err;
-      if (++failuresInARow >= MAX_CONSECUTIVE_FAILURES) throw err;
-      console.warn(`[gmail] skipping message after repeated failures: ${(err as Error).message}`);
-      await pool.query(RECORD_SQL, recordParams(userId, id, 'rule_skip', 'error', null, null));
-    }
-  }
+  const blocked = await blockedSenders(userId);
+  await processMessages(userId, token, batch, { gmail, classify, blocked, lastAttempt, stats });
 
   // Only after every message was recorded; with more left over, the next sync starts from the same
   // history_id and skips what is already recorded. Guarded by the token this run started with, so a run
@@ -146,12 +180,12 @@ async function run(
   }
 }
 
-/** Returns true when an article was saved. */
-async function processMessage(
+/** Look at one message once: record the decision and, for an editorial newsletter, save the article. Returns true when an article was saved. */
+export async function processMessage(
   userId: string,
   token: string,
   id: string,
-  gmail: typeof import('./client.js'),
+  gmail: GmailClient,
   classify: typeof classifyEmail,
   blocked: Set<string>,
 ): Promise<boolean> {

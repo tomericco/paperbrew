@@ -1,19 +1,23 @@
+import { waitUntil } from '@vercel/functions';
 import { Hono } from 'hono';
 import { config } from '../config.js';
 import { pool } from '../db/client.js';
 import { enqueue } from '../jobs/queue.js';
+import { DRAIN, drain } from '../jobs/runner.js';
 import { requireUser, type UserEnv } from '../routes/library.js';
 import { gmailAvailable } from './available.js';
 import { authUrl, exchangeCode, getProfile, revokeToken } from './client.js';
 import { decryptToken, encryptToken } from './crypto.js';
-import { signState, verifyState } from './state.js';
+import { signState, toReturnTarget, verifyState, type ReturnTarget } from './state.js';
 
 export const gmail = new Hono<UserEnv>();
 
 // The web app proxies /api/* to this API with the prefix stripped, so Google redirects to /api/gmail/callback
 // and the route below is /gmail/callback (and /me/gmail is reached as /api/me/gmail).
 const redirectUri = () => `${config.BETTER_AUTH_URL}/api/gmail/callback`;
-const settingsUrl = (outcome: 'connected' | 'error') => `${config.BETTER_AUTH_URL}/app/settings?gmail=${outcome}`;
+// Only the two allow-listed pages: the target comes from the signed state, never straight from the request.
+const returnUrl = (to: ReturnTarget, outcome: 'connected' | 'error') =>
+  `${config.BETTER_AUTH_URL}/app/${to === 'welcome' ? 'welcome' : 'settings'}?gmail=${outcome}`;
 
 /** Only logs the message: errors from the token exchange must never put codes or tokens in the logs. */
 const messageOf = (err: unknown) => (err instanceof Error ? err.message : 'unknown error');
@@ -28,19 +32,22 @@ gmail.use('/gmail/*', async (c, next) => {
 });
 
 gmail.get('/gmail/connect', (c) => {
-  const state = signState(c.get('userId'), config.BETTER_AUTH_SECRET);
+  // `from` picks the page the callback returns to: welcome or settings, anything else is settings.
+  const state = signState(c.get('userId'), config.BETTER_AUTH_SECRET, new Date(), toReturnTarget(c.req.query('from')));
   return c.redirect(authUrl(state, redirectUri()), 302);
 });
 
 gmail.get('/gmail/callback', async (c) => {
-  const fail = () => c.redirect(settingsUrl('error'), 302);
   const userId = c.get('userId');
   const { code, state, error } = c.req.query();
+  const verified = state ? verifyState(state, config.BETTER_AUTH_SECRET) : null;
+  const valid = verified !== null && verified.userId === userId;
+  // Without a valid state there is no trusted return target: settings.
+  const returnTo: ReturnTarget = valid ? verified.returnTo : 'settings';
+  const fail = () => c.redirect(returnUrl(returnTo, 'error'), 302);
 
   // `error` is Google's answer when the user clicks Cancel (access_denied).
-  if (error || !code || !state) return fail();
-  const verified = verifyState(state, config.BETTER_AUTH_SECRET);
-  if (!verified || verified.userId !== userId) return fail();
+  if (error || !code || !valid) return fail();
 
   try {
     const { accessToken, refreshToken } = await exchangeCode(code, redirectUri());
@@ -49,7 +56,7 @@ gmail.get('/gmail/callback', async (c) => {
     // Only mail arriving after this point is considered: the profile's history id is the starting line.
     const profile = await getProfile(accessToken);
 
-    await pool.query(
+    const { rows } = await pool.query<{ starter_done_at: Date | null }>(
       `insert into gmail_connections (user_id, google_email, refresh_token_enc, history_id, status, last_error, connected_at, last_synced_at)
        values ($1, $2, $3, $4, 'active', null, now(), null)
        on conflict (user_id) do update set
@@ -58,27 +65,43 @@ gmail.get('/gmail/callback', async (c) => {
          history_id = excluded.history_id,
          status = 'active',
          last_error = null,
-         connected_at = now()`,
+         connected_at = now()
+       returning starter_done_at`,
       [userId, profile.emailAddress, encryptToken(refreshToken, config.GMAIL_TOKEN_KEY!), profile.historyId],
     );
     await enqueue(pool, 'gmail_sync', { id: userId });
+    // The starter fetch runs once per connection: a reconnect (the row is kept) does not repeat it.
+    if (!rows[0]?.starter_done_at) await enqueue(pool, 'gmail_starter', { id: userId });
   } catch (err) {
     console.warn('[gmail] connect failed:', messageOf(err));
     return fail();
   }
-  return c.redirect(settingsUrl('connected'), 302);
+  // On Vercel there is no long-lived worker: run the jobs after the redirect is sent, so the starter fetch
+  // lands while the welcome page polls. Anything left over is picked up by the tick. Same as the inbound webhook.
+  if (process.env.VERCEL) {
+    waitUntil(drain(DRAIN).catch((err) => console.error('[gmail] drain failed:', messageOf(err))));
+  }
+  return c.redirect(returnUrl(returnTo, 'connected'), 302);
 });
 
 gmail.get('/me/gmail', async (c) => {
   const userId = c.get('userId');
   // The answer holds the address and mail subjects: never kept by a browser or a proxy.
   c.header('Cache-Control', 'private, no-store');
-  const { rows } = await pool.query<{ google_email: string; status: string; last_synced_at: Date | null }>(
-    'select google_email, status, last_synced_at from gmail_connections where user_id = $1',
-    [userId],
-  );
+  const { rows } = await pool.query<{
+    google_email: string;
+    status: string;
+    last_synced_at: Date | null;
+    starter_done_at: Date | null;
+  }>('select google_email, status, last_synced_at, starter_done_at from gmail_connections where user_id = $1', [userId]);
   const connection = rows[0];
   if (!connection) return c.json({ connected: false });
+
+  // All of the user's Gmail articles, not only the starter's: what the welcome page shows as "saved".
+  const { rows: counted } = await pool.query<{ saved: number }>(
+    `select count(*)::int as saved from articles where user_id = $1 and added_via = 'gmail'`,
+    [userId],
+  );
 
   const { rows: recent } = await pool.query<{
     from_email: string | null;
@@ -97,6 +120,7 @@ gmail.get('/me/gmail', async (c) => {
     email: connection.google_email,
     status: connection.status,
     lastSyncedAt: connection.last_synced_at,
+    starter: { state: connection.starter_done_at ? 'done' : 'pending', saved: counted[0]?.saved ?? 0 },
     recent: recent.map((r) => ({
       from: r.from_email,
       subject: r.subject,

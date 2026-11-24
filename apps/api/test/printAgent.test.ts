@@ -317,8 +317,13 @@ describe('GET /agent/issues/:id/pdf', () => {
     });
 
   /** The issue lookup finds `issue` (or nothing); the articles query answers `articles`. */
-  function withIssue(issue: { layout: 'flat' | 'booklet'; article_ids: string[] } | null, articles: unknown[] = [ARTICLE]) {
+  function withIssue(
+    issue: { layout: 'flat' | 'booklet'; article_ids: string[] } | null,
+    articles: unknown[] = [ARTICLE],
+    paperLook: string | null = null,
+  ) {
     pool((sql) => {
+      if (/from users/.test(sql)) return paperLook === null ? { rows: [], rowCount: 0 } : { rows: [{ paper_look: paperLook }], rowCount: 1 };
       if (issueSql.test(sql) && !articlesSql.test(sql)) return issue ? { rows: [issue], rowCount: 1 } : { rows: [], rowCount: 0 };
       if (articlesSql.test(sql)) return { rows: articles, rowCount: articles.length };
       return { rows: [], rowCount: 1 };
@@ -361,6 +366,28 @@ describe('GET /agent/issues/:id/pdf', () => {
     expect(layout).toBe('booklet');
     expect(date).toBeInstanceOf(Date);
     expect(find(printedSql)).toBeUndefined();
+  });
+
+  it("renders in the issue user's saved look", async () => {
+    withIssue({ layout: 'flat', article_ids: ['a1'] }, [ARTICLE], 'fieldnotes');
+    renderIssuePdf.mockResolvedValue(pdfStream());
+
+    const res = await get(`/agent/issues/${ISSUE_ID}/pdf`);
+
+    expect(res.status).toBe(200);
+    const users = find(/from users/)!;
+    expect(String(users[0])).toContain('paper_look');
+    expect(users[1]).toEqual(['user-9']);
+    expect(renderIssuePdf.mock.calls[0][3]).toBe('fieldnotes');
+  });
+
+  it('an unknown or missing stored look falls back to broadsheet', async () => {
+    for (const stored of ['weird', null]) {
+      withIssue({ layout: 'flat', article_ids: ['a1'] }, [ARTICLE], stored);
+      renderIssuePdf.mockResolvedValue(pdfStream());
+      await get(`/agent/issues/${ISSUE_ID}/pdf`);
+    }
+    expect(renderIssuePdf.mock.calls.map((c) => c[3])).toEqual(['broadsheet', 'broadsheet']);
   });
 
   it('every article archived since queuing -> 204 and the issue is marked printed', async () => {

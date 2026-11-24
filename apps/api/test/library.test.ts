@@ -86,6 +86,7 @@ describe('paper layout setting', () => {
 
   const SAVED = {
     paper_layout: 'booklet',
+    paper_look: 'zine',
     brew_enabled: false,
     brew_days: [],
     brew_hour: 7,
@@ -94,6 +95,7 @@ describe('paper layout setting', () => {
   };
   const SAVED_JSON = {
     paperLayout: 'booklet',
+    paperLook: 'zine',
     brewEnabled: false,
     brewDays: [],
     brewHour: 7,
@@ -109,7 +111,7 @@ describe('paper layout setting', () => {
     return vi.spyOn(pool, 'query').mockImplementation((async (sql: string) => {
       if (/from users where auth_user_id/.test(sql)) return { rows: [{ id: 'user-1' }] };
       if (/from users u join inbound_addresses/.test(sql)) {
-        return { rows: [{ token: 'amber-otter', email: 'a@example.com', paper_layout: 'booklet' }] };
+        return { rows: [{ token: 'amber-otter', email: 'a@example.com', paper_layout: 'booklet', paper_look: 'zine' }] };
       }
       if (/^\s*update users set/.test(sql)) return { rows: [SAVED], rowCount: 1 };
       return { rows: [] };
@@ -128,6 +130,12 @@ describe('paper layout setting', () => {
     const res = await app.request('/me', { headers: { cookie: 'better-auth.session_token=x' } });
     expect(res.status).toBe(200);
     expect((await res.json()).paperLayout).toBe('booklet');
+  });
+
+  it('GET /me returns paperLook', async () => {
+    signedIn();
+    const res = await app.request('/me', { headers: { cookie: 'better-auth.session_token=x' } });
+    expect((await res.json()).paperLook).toBe('zine');
   });
 
   it('GET /me returns gmailAvailable from the environment', async () => {
@@ -186,6 +194,16 @@ describe('paper layout setting', () => {
     expect(updates[0]![1]).toEqual(['booklet', 'user-1']);
   });
 
+  it('PUT /me/settings saves the look', async () => {
+    const query = signedIn();
+    const res = await put({ paperLook: 'zine' });
+    expect(res.status).toBe(200);
+    expect((await res.json()).paperLook).toBe('zine');
+    const updates = query.mock.calls.filter(([sql]) => /update users set paper_look = \$1 where id = \$2 returning/.test(String(sql)));
+    expect(updates).toHaveLength(1);
+    expect(updates[0]![1]).toEqual(['zine', 'user-1']);
+  });
+
   it('PUT /me/settings updates only the given columns, with parameters', async () => {
     const query = signedIn();
     const res = await put({
@@ -205,6 +223,7 @@ describe('paper layout setting', () => {
     expect(sql).toContain('brew_budget_minutes = $5');
     expect(sql).toContain('where id = $6');
     expect(sql).not.toContain('paper_layout =');
+    expect(sql).not.toContain('paper_look =');
     expect(sql).not.toContain('Jerusalem');
     expect(update![1]).toEqual([true, [1, 3, 5], 18, 'Asia/Jerusalem', 45, 'user-1']);
   });
@@ -222,6 +241,8 @@ describe('paper layout setting', () => {
     null,
     { foo: 1 },
     { paperLayout: 'a5' },
+    { paperLook: 'x' },
+    { paperLook: 1 },
     { brewTimezone: 'Mars/Base' },
     { brewTimezone: '' },
     { brewBudgetMinutes: 50 },
@@ -393,6 +414,21 @@ describe('archiving articles', () => {
     expect(articleSql(query)[0]![1]).toEqual(['user-1']);
   });
 
+  it('GET /articles includes readingMinutes, null when unknown', async () => {
+    const query = signedIn([
+      { id: A, title: 'T', site_name: 's', source_url: 'https://x.test', status: 'ready', word_count: 10, reading_minutes: 7, created_at: new Date('2026-11-01T00:00:00Z') },
+      { id: B, title: 'U', site_name: 's', source_url: 'https://y.test', status: 'pending', word_count: null, reading_minutes: null, created_at: new Date('2026-11-01T00:00:00Z') },
+    ]);
+    const res = await app.request('/articles', { headers: cookie });
+    expect(String(articleSql(query)[0]![0])).toContain('reading_minutes');
+    const { articles } = await res.json();
+    expect(articles.map((a: { readingMinutes: number | null }) => a.readingMinutes)).toEqual([7, null]);
+    const archived = signedIn([{ id: A, reading_minutes: 3, created_at: new Date(), archived_at: new Date() }]);
+    const res2 = await app.request('/articles?archived=1', { headers: cookie });
+    expect(String(articleSql(archived)[0]![0])).toContain('reading_minutes');
+    expect((await res2.json()).articles[0].readingMinutes).toBe(3);
+  });
+
   it('GET /articles?archived=1 lists archived with archivedAt', async () => {
     const archivedAt = new Date('2026-11-20T10:00:00.000Z');
     const query = signedIn([
@@ -539,5 +575,80 @@ describe('deleting articles and blocking senders', () => {
     const res = await del();
     expect(res.status).toBe(204);
     expect(blocks(query)).toHaveLength(0);
+  });
+});
+
+describe('onboarding', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const cookie = { cookie: 'better-auth.session_token=x' };
+  const BARE = {
+    token: 'amber-otter',
+    email: 'a@example.com',
+    paper_layout: 'flat',
+    paper_look: 'broadsheet',
+    onboarded: false,
+    has_articles: false,
+    has_gmail: false,
+    has_device: false,
+    brew_enabled: false,
+  };
+
+  const signedIn = (me: Record<string, unknown>) => {
+    vi.spyOn(auth.api, 'getSession').mockResolvedValue({
+      user: { id: 'auth-1', email: 'a@example.com' },
+      session: {},
+    } as never);
+    return vi.spyOn(pool, 'query').mockImplementation((async (sql: string) => {
+      if (/from users where auth_user_id/.test(sql)) return { rows: [{ id: 'user-1' }] };
+      if (/from users u join inbound_addresses/.test(sql)) return { rows: [{ ...BARE, ...me }] };
+      if (/^\s*update users set onboarded_at/.test(sql)) return { rows: [], rowCount: 1 };
+      return { rows: [] };
+    }) as never);
+  };
+
+  const me = async () => (await app.request('/me', { headers: cookie })).json();
+
+  it('GET /me needs onboarding for a bare user', async () => {
+    signedIn({});
+    expect((await me()).needsOnboarding).toBe(true);
+  });
+
+  it.each([
+    ['has finished onboarding', { onboarded: true }],
+    ['has saved articles', { has_articles: true }],
+    ['has a Gmail connection', { has_gmail: true }],
+    ['has a paired printer', { has_device: true }],
+    ['has brewing switched on', { brew_enabled: true }],
+  ])('GET /me does not need onboarding when the user %s', async (_name, over) => {
+    signedIn(over);
+    expect((await me()).needsOnboarding).toBe(false);
+  });
+
+  it('GET /me checks the conditions in the same query and ignores revoked devices', async () => {
+    const query = signedIn({});
+    await me();
+    const [call] = query.mock.calls.filter(([sql]) => /from users u join inbound_addresses/.test(String(sql)));
+    const sql = String(call![0]);
+    expect(sql).toMatch(/onboarded_at/);
+    expect(sql).toMatch(/from articles/);
+    expect(sql).toMatch(/from gmail_connections/);
+    expect(sql).toMatch(/from print_devices[^)]*revoked_at is null/);
+    expect(sql).toMatch(/brew_enabled/);
+  });
+
+  it('POST /me/onboarding/complete answers 204 and keeps the first completion time', async () => {
+    const query = signedIn({});
+    const res = await app.request('/me/onboarding/complete', { method: 'POST', headers: cookie });
+    expect(res.status).toBe(204);
+    const updates = query.mock.calls.filter(([sql]) => /^\s*update users set onboarded_at/.test(String(sql)));
+    expect(updates).toHaveLength(1);
+    expect(String(updates[0]![0])).toMatch(/onboarded_at = coalesce\(onboarded_at, now\(\)\)/);
+    expect(updates[0]![1]).toEqual(['user-1']);
+  });
+
+  it('POST /me/onboarding/complete without a session is 401', async () => {
+    const res = await app.request('/me/onboarding/complete', { method: 'POST' });
+    expect(res.status).toBe(401);
   });
 });

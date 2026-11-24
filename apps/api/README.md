@@ -133,6 +133,10 @@ select cron.unschedule('paperbrew-tick');
 
 Gmail features appear only when `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GMAIL_TOKEN_KEY` are all set.
 
+**Starter fetch.** The regular sync only looks at mail that arrives after the connect. So the first connect also queues a one-off `gmail_starter` job (`src/gmail/starter.ts`): it scans up to 40 messages from the last 30 days (`newer_than:30d -in:sent -in:chats -in:drafts`) through the same per-message pipeline, stops after 3 articles, and sets `gmail_connections.starter_done_at`, also when it found nothing, when Google revoked access (the connection is flagged `needs_reconnect` like the sync) and on the job's last failed attempt. The callback queues it only while `starter_done_at` is null, so a reconnect does not repeat it (a disconnect deletes the row, so connecting again afterwards does). `GET /me/gmail` reports `starter: { state: 'pending' | 'done', saved }`, where `saved` counts all of the user's `added_via = 'gmail'` articles.
+
+**Return target.** `GET /gmail/connect?from=welcome` returns to `/app/welcome?gmail=connected|error` after Google; anything else returns to `/app/settings?gmail=...`. The target is signed into the OAuth state (`<userId>.<welcome|settings>.<expiresAt>.<hmac>`), so it cannot be changed on the way back.
+
 ## Print agent API
 
 The Mac app (a local agent) prints queued issues. It talks to these routes; everything else in this section is its contract. Tables: `issues`, `print_devices` (one row per paired Mac, only the SHA-256 of its token), `print_pair_codes` (single-use codes, 10 minutes, only the hash).
@@ -149,6 +153,16 @@ The Mac app (a local agent) prints queued issues. It talks to these routes; ever
 - **Auth:** `Authorization: Bearer <token>` on every route except pairing. `401` means the device was revoked (or the token is unknown): stop and ask the user to pair again.
 - **States:** `queued` → `printing` (claimed) → `printed` or `failed`. `ok: true` marks the issue printed and archives its articles; `ok: false` marks it failed with `error` (cut to 500 characters). A failed issue can be printed again from Settings.
 - **Timeout:** an issue `printing` for over 30 minutes is failed with `error = 'timed out'` by the stale sweep in `/cron/tick`, so the Mac must report within 30 minutes of claiming. A success reported late for a `timed out` issue still counts (`ok: true` makes it `printed` and archives its articles); a late `ok: false` is a `404`.
+
+## Library API (signed-in user)
+
+Beyond the basics (`/me/address`, `/me/schedule`, `/articles`), these were added with onboarding:
+
+- `PUT /me/settings` accepts `paperLook`: `broadsheet` (default), `fieldnotes` or `zine`, stored in `users.paper_look`. The renderer applies it to `GET /brew` and to the print agent's PDF. `GET /me` returns it as `paperLook`.
+- `GET /me` also returns `needsOnboarding`. It is computed, never stored: `users.onboarded_at` is null **and** the user has no articles (archived and not-ready ones count), no Gmail connection, no active print device and brew is not enabled. `POST /me/onboarding/complete` sets `onboarded_at` (idempotent, `204`).
+- `GET /brew?ids=a,b,c` brews only those articles: at most 50 UUIDs, taken from the caller's ready, unarchived articles, oldest first (`created_at` ascending). `400` on a bad list. Without `ids` it brews every saved article, as before.
+- `GET /me/next-issue` previews what the next scheduled issue holds: `{ ids, minutes, budgetMinutes }`. Read-only (no rollover, no writes), same pick rule as `create_issue` (oldest first, picked until the reading-time budget is full), and it works whether or not the schedule is on.
+- `GET /articles` rows carry `readingMinutes` (null when unknown; counts as 1 minute when picking).
 
 ## Security notes
 
