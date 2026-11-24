@@ -8,6 +8,7 @@ export type Article = {
   sourceUrl: string | null;
   status: 'pending' | 'ready' | 'failed';
   wordCount: number | null;
+  readingMinutes?: number | null;
   addedVia: 'email' | 'web' | 'gmail';
   createdAt: string;
 };

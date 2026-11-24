@@ -2997,6 +2997,96 @@ button:disabled {
   line-height: 1.2;
 }
 
+/* First issue card: looking, the found list, and brewing progress. */
+
+.ob-looking {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ob-spin {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--ob-line);
+  border-top-color: var(--ob-ink);
+  border-radius: 50%;
+  animation: ob-spin 800ms linear infinite;
+}
+
+@keyframes ob-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ob-found li > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ob-found b {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.ob-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ob-progress {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--ob-line);
+}
+
+.ob-progress::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  border-radius: 2px;
+  background: var(--ob-ink);
+  animation: ob-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes ob-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+/* A footer with two actions: they sit together on the right. On a phone they take the full row, with Back below. */
+.ob-foot {
+  flex-wrap: wrap;
+}
+
+.ob-actions {
+  display: flex;
+  gap: 10px;
+}
+
+@media (max-width: 520px) {
+  .ob-actions {
+    order: -1;
+    flex: 1 1 100%;
+  }
+
+  .ob-actions > button {
+    flex: 1;
+  }
+}
+
 @media (max-width: 520px) {
   .ob-card {
     padding: 24px 20px;
@@ -3058,5 +3148,16 @@ button:disabled {
 @media (prefers-reduced-motion: reduce) {
   .ob-card {
     animation: none;
+  }
+
+  .ob-spin {
+    animation: none;
+  }
+
+  /* A static bar: still reads as in progress through the label and the live text. */
+  .ob-progress::after {
+    animation: none;
+    width: 100%;
+    opacity: 0.35;
   }
 }

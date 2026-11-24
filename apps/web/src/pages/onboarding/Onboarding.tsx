@@ -4,6 +4,7 @@ import { authClient } from '../../auth';
 import { Layout } from '../../Layout';
 import { SkipContext } from './Card';
 import { DoneCard } from './DoneCard';
+import { FirstIssueCard } from './FirstIssueCard';
 import { GmailCard } from './GmailCard';
 import { LookCard } from './LookCard';
 import { readStoredStep, STEP_ORDER, storeStep } from './steps';
@@ -18,6 +19,7 @@ const CARDS: Partial<Record<Step, ComponentType<CardProps>>> = {
   welcome: Welcome,
   gmail: GmailCard,
   look: LookCard,
+  first: FirstIssueCard,
   done: DoneCard,
 };
 

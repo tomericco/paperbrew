@@ -6,6 +6,7 @@ import { ArchivedList } from './ArchivedList';
 import { ArticleTitle, articleMeta } from './article';
 import type { Article } from './article';
 import { BrewedDialog } from './BrewedDialog';
+import { downloadBrew } from './brewClient';
 import { errorText, LAYOUTS } from './layouts';
 import type { PaperLayout } from './layouts';
 
@@ -180,27 +181,10 @@ function LibraryContent({ name }: { name: string }) {
         pending = latest;
       }
       if (!saved) return;
-      const res = await fetch('/api/brew');
-      if (!res.ok) {
-        setBrewError(await errorText(res, 'Brewing failed.'));
-        return;
-      }
-      const blob = await res.blob();
-      const disposition = res.headers.get('content-disposition') ?? '';
-      const filename = /filename="?([^";]+)"?/i.exec(disposition)?.[1] ?? 'paperbrew.pdf';
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      // Safari can cancel the download if the URL is revoked in the same task as the click.
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-      // Exactly what is in this PDF, so archiving never touches an article that arrived mid-brew.
-      setBrewedIds((res.headers.get('x-brew-article-ids') ?? '').split(',').filter(Boolean));
-    } catch {
-      setBrewError('Brewing failed.');
+      const { ids } = await downloadBrew();
+      setBrewedIds(ids);
+    } catch (err) {
+      setBrewError(err instanceof Error ? err.message : 'Brewing failed.');
     } finally {
       setBrewing(false);
     }
