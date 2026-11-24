@@ -10,6 +10,8 @@ import { isUniqueViolation, pool } from '../db/client.js';
 import { gmailAvailable } from '../gmail/available.js';
 import { senderEmail } from '../gmail/rules.js';
 import { formatAddress, normalizeToken } from '../inbound/address.js';
+import { CANDIDATES_SQL } from '../schedule/createIssue.js';
+import { planIssue } from '../schedule/pick.js';
 import { isBrewDue, nextBrewAt } from '../schedule/schedule.js';
 import { UUID_RE } from '../uuid.js';
 
@@ -238,6 +240,29 @@ library.get('/me/schedule', async (c) => {
   });
 });
 
+/**
+ * Read-only preview of what the next scheduled issue would hold: the same candidates and pick rule as createIssue,
+ * with no writes and no rollover. Works whether or not the schedule is on.
+ */
+library.get('/me/next-issue', async (c) => {
+  const userId = c.get('userId');
+  const { rows: users } = await pool.query<{ brew_budget_minutes: number }>(
+    'select brew_budget_minutes from users where id = $1',
+    [userId],
+  );
+  if (!users[0]) return c.json({ error: 'not found' }, 404);
+  const budgetMinutes = users[0].brew_budget_minutes;
+  const { rows } = await pool.query<{ id: string; reading_minutes: number | null; rollover_count: number }>(CANDIDATES_SQL, [userId]);
+  const { picked } = planIssue(
+    rows.map((r) => ({ id: r.id, readingMinutes: r.reading_minutes, rolloverCount: r.rollover_count })),
+    budgetMinutes,
+  );
+  const byId = new Map(rows.map((r) => [r.id, r.reading_minutes]));
+  // A null reading time counts as one minute, as in planIssue.
+  const minutes = picked.reduce((sum, id) => sum + (byId.get(id) ?? 1), 0);
+  return c.json({ ids: picked, minutes, budgetMinutes });
+});
+
 type ArticleRow = {
   id: string;
   title: string | null;
@@ -245,6 +270,7 @@ type ArticleRow = {
   source_url: string | null;
   status: string;
   word_count: number | null;
+  reading_minutes: number | null;
   added_via: string;
   created_at: Date;
   archived_at?: Date;
@@ -258,6 +284,7 @@ const toArticle = (r: ArticleRow) => ({
   sourceUrl: r.source_url,
   status: r.status,
   wordCount: r.word_count,
+  readingMinutes: r.reading_minutes,
   addedVia: r.added_via,
   createdAt: r.created_at,
 });
@@ -266,7 +293,7 @@ library.get('/articles', async (c) => {
   const userId = c.get('userId');
   if (c.req.query('archived') === '1') {
     const { rows } = await pool.query<ArticleRow & { archived_at: Date }>(
-      `select id, title, site_name, source_url, status, word_count, added_via, created_at, archived_at, archive_reason
+      `select id, title, site_name, source_url, status, word_count, reading_minutes, added_via, created_at, archived_at, archive_reason
        from articles
        where user_id = $1 and archived_at is not null
        order by archived_at desc, created_at asc
@@ -276,7 +303,7 @@ library.get('/articles', async (c) => {
     return c.json({ articles: rows.map((r) => ({ ...toArticle(r), archivedAt: r.archived_at, archiveReason: r.archive_reason ?? null })) });
   }
   const { rows } = await pool.query<ArticleRow>(
-    `select id, title, site_name, source_url, status, word_count, added_via, created_at
+    `select id, title, site_name, source_url, status, word_count, reading_minutes, added_via, created_at
      from articles
      where user_id = $1 and archived_at is null
      order by created_at desc

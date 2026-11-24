@@ -13,7 +13,7 @@ interface UserRow {
 }
 
 // Ready, unarchived articles that are not already in an open issue. Pending articles never qualify.
-const CANDIDATES_SQL = `
+export const CANDIDATES_SQL = `
   select a.id, a.reading_minutes, a.rollover_count
   from articles a
   where a.user_id = $1 and a.status = 'ready' and a.archived_at is null

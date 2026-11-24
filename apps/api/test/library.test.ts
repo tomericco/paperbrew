@@ -414,6 +414,21 @@ describe('archiving articles', () => {
     expect(articleSql(query)[0]![1]).toEqual(['user-1']);
   });
 
+  it('GET /articles includes readingMinutes, null when unknown', async () => {
+    const query = signedIn([
+      { id: A, title: 'T', site_name: 's', source_url: 'https://x.test', status: 'ready', word_count: 10, reading_minutes: 7, created_at: new Date('2026-11-01T00:00:00Z') },
+      { id: B, title: 'U', site_name: 's', source_url: 'https://y.test', status: 'pending', word_count: null, reading_minutes: null, created_at: new Date('2026-11-01T00:00:00Z') },
+    ]);
+    const res = await app.request('/articles', { headers: cookie });
+    expect(String(articleSql(query)[0]![0])).toContain('reading_minutes');
+    const { articles } = await res.json();
+    expect(articles.map((a: { readingMinutes: number | null }) => a.readingMinutes)).toEqual([7, null]);
+    const archived = signedIn([{ id: A, reading_minutes: 3, created_at: new Date(), archived_at: new Date() }]);
+    const res2 = await app.request('/articles?archived=1', { headers: cookie });
+    expect(String(articleSql(archived)[0]![0])).toContain('reading_minutes');
+    expect((await res2.json()).articles[0].readingMinutes).toBe(3);
+  });
+
   it('GET /articles?archived=1 lists archived with archivedAt', async () => {
     const archivedAt = new Date('2026-11-20T10:00:00.000Z');
     const query = signedIn([
