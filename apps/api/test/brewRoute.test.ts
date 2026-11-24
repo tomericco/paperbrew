@@ -49,11 +49,11 @@ function bytesStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
   });
 }
 
-/** Routes the pool mock by SQL: the articles query gets `articles`, the users query gets the layout. */
-function mockDb(articles: unknown[], paperLayout: string | null = 'flat') {
+/** Routes the pool mock by SQL: the articles query gets `articles`, the users query gets the layout and look. */
+function mockDb(articles: unknown[], paperLayout: string | null = 'flat', paperLook: string | null = null) {
   query.mockImplementation(async (sql: string) => {
     if (/from articles/.test(sql)) return { rows: articles };
-    if (/from users/.test(sql)) return { rows: paperLayout === null ? [] : [{ paper_layout: paperLayout }] };
+    if (/from users/.test(sql)) return { rows: paperLayout === null ? [] : [{ paper_layout: paperLayout, paper_look: paperLook }] };
     throw new Error(`unexpected query: ${sql}`);
   });
 }
@@ -153,6 +153,30 @@ describe('GET /brew', () => {
     htmlToPdf.mockResolvedValue(pdfStream([1]));
     const res = await brew.request('/brew', { headers: { 'x-test-user': 'yes' } });
     expect(res.headers.get('content-disposition')).toBe('attachment; filename="paperbrew-2026-11-01.pdf"');
+  });
+
+  it('reads paper_look with the layout and renders in that look', async () => {
+    mockDb([ROW], 'flat', 'zine');
+    htmlToPdf.mockResolvedValue(pdfStream([1]));
+    await brew.request('/brew', { headers: { 'x-test-user': 'yes' } });
+    const [sql] = query.mock.calls.find(([q]) => /from users/.test(q))!;
+    expect(sql).toContain('paper_look');
+    const html: string = htmlToPdf.mock.calls[0][0];
+    expect(html).toContain('Space Mono');
+    expect(html).toContain('#1d4ed8');
+  });
+
+  it('falls back to broadsheet for an unknown or missing stored look', async () => {
+    for (const stored of ['weird', null]) {
+      mockDb([ROW], 'flat', stored);
+      htmlToPdf.mockResolvedValue(pdfStream([1]));
+      await brew.request('/brew', { headers: { 'x-test-user': 'yes' } });
+    }
+    for (const [html] of htmlToPdf.mock.calls) {
+      expect(html).not.toContain('Space Mono');
+      expect(html).not.toContain('DM Sans');
+    }
+    expect(htmlToPdf).toHaveBeenCalledTimes(2);
   });
 
   it('booklet: renders A5 and returns imposed A4 sheets', async () => {

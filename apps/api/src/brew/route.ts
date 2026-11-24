@@ -4,6 +4,7 @@ import { requireUser, type UserEnv } from '../routes/library.js';
 import { BusyError } from './lifecycle.js';
 import { renderIssuePdf } from './issuePdf.js';
 import type { PaperLayout } from './layout.js';
+import { toPaperLook } from './look.js';
 import type { BrewArticle } from './render.js';
 
 const MAX_ARTICLES = 50;
@@ -30,11 +31,12 @@ brew.get('/brew', async (c) => {
     [c.get('userId')],
   );
 
-  const { rows: users } = await pool.query<{ paper_layout: string | null }>(
-    'select paper_layout from users where id = $1',
+  const { rows: users } = await pool.query<{ paper_layout: string | null; paper_look: string | null }>(
+    'select paper_layout, paper_look from users where id = $1',
     [c.get('userId')],
   );
   const layout: PaperLayout = users[0]?.paper_layout === 'booklet' ? 'booklet' : 'flat';
+  const look = toPaperLook(users[0]?.paper_look);
 
   const articles: BrewArticle[] = rows.map((r) => ({
     title: r.title,
@@ -48,7 +50,7 @@ brew.get('/brew', async (c) => {
   const date = new Date();
   let pdf: ReadableStream<Uint8Array>;
   try {
-    pdf = await renderIssuePdf(articles, layout, date);
+    pdf = await renderIssuePdf(articles, layout, date, look);
   } catch (err) {
     if (err instanceof BusyError) {
       return c.json({ error: 'Another magazine is brewing. Try again in a minute.' }, 503);

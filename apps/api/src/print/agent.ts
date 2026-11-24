@@ -4,6 +4,7 @@ import { pool } from '../db/client.js';
 import { BusyError } from '../brew/lifecycle.js';
 import { renderIssuePdf } from '../brew/issuePdf.js';
 import type { PaperLayout } from '../brew/layout.js';
+import { toPaperLook } from '../brew/look.js';
 import type { BrewArticle } from '../brew/render.js';
 import { requireDevice, type DeviceEnv } from './devices.js';
 import { UUID_RE } from '../uuid.js';
@@ -140,10 +141,16 @@ agent.get('/agent/issues/:id/pdf', requireDevice, async (c) => {
     contentHtml: r.content_html,
   }));
 
+  const { rows: users } = await pool.query<{ paper_look: string | null }>(
+    'select paper_look from users where id = $1',
+    [userId],
+  );
+  const look = toPaperLook(users[0]?.paper_look);
+
   const date = new Date();
   let pdf: ReadableStream<Uint8Array>;
   try {
-    pdf = await renderIssuePdf(articles, issue.layout, date);
+    pdf = await renderIssuePdf(articles, issue.layout, date, look);
   } catch (err) {
     if (err instanceof BusyError) {
       return c.json({ error: 'Another magazine is brewing. Try again in a minute.' }, 503, { 'retry-after': '30' });
