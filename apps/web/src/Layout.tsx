@@ -26,7 +26,7 @@ export function Layout({
   return (
     <div className="shell">
       <header className="header">
-        <div className="container">
+        <div className={nav ? 'container desk-header' : 'container'}>
           <Brand />
           {nav && (
             <nav className="desk-nav" aria-label="Main">

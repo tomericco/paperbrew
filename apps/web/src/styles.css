@@ -3366,7 +3366,7 @@ a.ob-cta {
 }
 
 /* App nav (Desk, Issues, Settings): underlined like the magazine's section rule. Beside the brand on
-   wide screens, its own row under it on phones. */
+   wide screens, under it (with Sign out) on phones. */
 
 .desk-nav {
   margin-right: auto;
@@ -3408,21 +3408,38 @@ a.ob-cta {
   }
 }
 
+/* Phones: the brand gets its own row, then the nav and Sign out share the second. DOM order is brand, nav,
+   actions, so focus follows what you see on every width. */
 @media (max-width: 600px) {
-  .desk-nav {
-    order: 3;
-    flex-basis: 100%;
-    margin: 0 0 0 -12px;
+  .desk-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'brand brand'
+      'nav actions';
+    align-items: center;
+    gap: 4px 12px;
   }
 
-  /* Brand and Sign out share the first row; the nav gets the second. */
-  .desk-nav ~ .header-actions {
+  .desk-header > .brand {
+    grid-area: brand;
+    justify-self: start;
+  }
+
+  .desk-header > .desk-nav {
+    grid-area: nav;
+    margin: 0 0 0 -12px;
+    min-width: 0;
+  }
+
+  .desk-header > .header-actions {
+    grid-area: actions;
     width: auto;
   }
 }
 
 @media (max-width: 480px) {
-  .desk-nav ~ .header-actions .who {
+  .desk-header .who {
     display: none;
   }
 }
@@ -3442,50 +3459,56 @@ a.ob-cta {
   min-width: 0;
 }
 
+/* Phones: one column in DOM order (top card, switch, pile, setup), so focus order matches the layout.
+   Wide screens: two columns by named areas. The top card spans the first two rows, so the rail (setup)
+   starts right under the short Brewing card while the pile starts under the top card. */
 .desk-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 24px;
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
 }
 
-.desk-main,
-.desk-side {
+.desk-rail {
   display: grid;
-  gap: 24px;
+  gap: 16px;
   min-width: 0;
 }
 
-@media (max-width: 899px) {
+@media (min-width: 900px) {
   .desk-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas:
+      'hero brewing'
+      'hero rail'
+      'pile rail';
+    gap: 24px;
+    align-items: start;
   }
 
-  .desk-main,
-  .desk-side {
-    display: contents;
+  /* No schedule on this account: no Brewing card, so the rail starts at the top. */
+  .desk-grid.no-brewing {
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      'hero rail'
+      'pile rail';
   }
 
   .desk-hero {
-    order: 1;
+    grid-area: hero;
   }
 
   .desk-brewing {
-    order: 2;
+    grid-area: brewing;
   }
 
   .desk-pile {
-    order: 3;
+    grid-area: pile;
   }
 
-  .desk-setup {
-    order: 4;
-  }
-
-  .desk-save {
-    order: 5;
+  .desk-rail {
+    grid-area: rail;
+    gap: 24px;
   }
 }
 
@@ -3587,6 +3610,31 @@ a.ob-cta {
 
 .desk-hero h1:focus {
   outline: none;
+}
+
+/* Loading: two faint lines where the issue details will be. */
+.desk-skeleton {
+  display: grid;
+  gap: 10px;
+}
+
+.desk-skeleton i {
+  display: block;
+  height: 14px;
+  width: 70%;
+  border-radius: 3px;
+  background: var(--desk-line-soft);
+  animation: desk-pulse 1.4s ease-in-out infinite;
+}
+
+.desk-skeleton i + i {
+  width: 45%;
+}
+
+@keyframes desk-pulse {
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .desk-stats {
@@ -3769,6 +3817,11 @@ a.ob-cta {
   list-style: none;
 }
 
+/* No hint bar while the schedule is unknown: keep the rows clear of the heading. */
+.desk-pile-head + .desk-rows {
+  margin-top: 10px;
+}
+
 .desk-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -3776,6 +3829,10 @@ a.ob-cta {
   gap: 12px;
   padding-block: 10px;
   border-top: 1px solid var(--desk-line-soft);
+}
+
+.desk-row.is-unknown {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .desk-check {
@@ -3992,6 +4049,10 @@ a.ob-cta {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .desk-skeleton i {
+    animation: none;
+  }
+
   .desk-meter i,
   .desk-switch-track,
   .desk-switch-track::before {

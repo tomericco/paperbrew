@@ -3,14 +3,18 @@ import { ArticleTitle, articleMeta } from '../article';
 import type { Article } from '../article';
 import { AddressCopy } from '../onboarding/AddressCopy';
 
+/** How the pile is shown: ticked by hand, picked by the schedule, or plain while the schedule is unknown. */
+export type PileMode = 'hand' | 'scheduled' | 'unknown';
+
 /**
  * The reading pile, oldest first. By hand: a checkbox per article (the title is its label), and a ticked
  * article past the 50 that fit in one issue is marked "Next time". On a schedule: "In issue" for the
- * articles the next issue would take (the server's pick), "Next time" for the rest. Empty: the address.
+ * articles the next issue would take (the server's pick), "Next time" for the rest. While the schedule is
+ * loading or failed to load: just the articles, with Remove. Empty: the address.
  */
 export function Pile({
   articles,
-  scheduled,
+  mode,
   inIssue,
   budgetMinutes,
   unticked,
@@ -22,7 +26,7 @@ export function Pile({
   onRemove,
 }: {
   articles: Article[];
-  scheduled: boolean;
+  mode: PileMode;
   /** The next scheduled issue's ids; null while unknown. */
   inIssue: ReadonlySet<string> | null;
   budgetMinutes: number | null;
@@ -36,14 +40,15 @@ export function Pile({
   onRemove: (article: Article) => void;
 }) {
   const idBase = useId();
+  const scheduled = mode === 'scheduled';
   const allTicked = unticked.size === 0 || articles.every((a) => !unticked.has(a.id));
 
-  let hint: string;
+  let hint = '';
   if (scheduled)
     hint = budgetMinutes
       ? `Picked oldest first to fill your ${budgetMinutes} minutes. Switch to by hand to choose yourself.`
       : 'Picked oldest first to fill your reading time. Switch to by hand to choose yourself.';
-  else hint = 'Tick the articles for your next issue.';
+  else if (mode === 'hand') hint = 'Tick the articles for your next issue.';
 
   return (
     <section className="desk-card desk-pile" aria-labelledby={`${idBase}-title`}>
@@ -62,26 +67,29 @@ export function Pile({
         </div>
       ) : (
         <>
-          <div className="desk-pile-bar">
-            <p className="desk-soft desk-small">{hint}</p>
-            {!scheduled && (
-              <button type="button" className="desk-link" onClick={onToggleAll}>
-                {allTicked ? 'Untick all' : 'Tick all'}
-              </button>
-            )}
-          </div>
+          {hint && (
+            <div className="desk-pile-bar">
+              <p className="desk-soft desk-small">{hint}</p>
+              {mode === 'hand' && (
+                <button type="button" className="desk-link" onClick={onToggleAll}>
+                  {allTicked ? 'Untick all' : 'Tick all'}
+                </button>
+              )}
+            </div>
+          )}
           <ul className="desk-rows">
             {articles.map((article) => {
               const titleId = `${idBase}-${article.id}`;
               const ticked = !unticked.has(article.id);
-              const nextTime = scheduled ? inIssue !== null && !inIssue.has(article.id) : ticked && !going.has(article.id);
+              const pastCap = mode === 'hand' && ticked && !going.has(article.id);
               return (
-                <li key={article.id} className={scheduled ? 'desk-row is-scheduled' : 'desk-row'}>
-                  {scheduled ? (
+                <li key={article.id} className={`desk-row is-${mode}`}>
+                  {scheduled && (
                     <span className={inIssue?.has(article.id) ? 'desk-pick is-in' : 'desk-pick'}>
                       {inIssue === null ? '…' : inIssue.has(article.id) ? 'In issue' : 'Next time'}
                     </span>
-                  ) : (
+                  )}
+                  {mode === 'hand' && (
                     <label className="desk-check">
                       <input type="checkbox" checked={ticked} aria-labelledby={titleId} onChange={() => onToggle(article.id)} />
                     </label>
@@ -91,7 +99,7 @@ export function Pile({
                       <ArticleTitle article={article} />
                     </span>
                     <span className="desk-row-meta">
-                      {!scheduled && nextTime && <span className="desk-pick">Next time</span>}
+                      {pastCap && <span className="desk-pick">Next time</span>}
                       {articleMeta(article)}
                     </span>
                   </div>

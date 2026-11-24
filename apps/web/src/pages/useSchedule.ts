@@ -90,6 +90,9 @@ export function useSchedule({ queue = false }: { queue?: boolean } = {}) {
     setSchedule(next);
   }, []);
 
+  // Bumped by `reload` to read the schedule again after a failed load.
+  const [attempt, setAttempt] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
     fetchSchedule()
@@ -104,7 +107,13 @@ export function useSchedule({ queue = false }: { queue?: boolean } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [update]);
+  }, [update, attempt]);
+
+  /** Reads the schedule again, for a Try again after a failed load. */
+  const reload = useCallback(() => {
+    setLoadError('');
+    setAttempt((n) => n + 1);
+  }, []);
 
   /** One round trip: optimistic change, PUT, then the server's own copy. False when the save failed. */
   const send = useCallback(
@@ -178,5 +187,5 @@ export function useSchedule({ queue = false }: { queue?: boolean } = {}) {
     [queue, send, update],
   );
 
-  return { schedule, loadError, saving, error, save };
+  return { schedule, loadError, saving, error, save, reload };
 }

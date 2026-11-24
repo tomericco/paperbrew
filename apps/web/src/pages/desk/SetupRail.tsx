@@ -98,7 +98,8 @@ export function SetupRail({
               <span className="desk-soft desk-small">{row.status}</span>
             </span>
             <a className="desk-link" href="/app/settings">
-              {row.done ? 'Change' : 'Set up'}
+              {/* "Set up" only once a part is known to be missing, never while it is loading or unknown. */}
+              {row.done || row.status === LOADING || row.status === UNKNOWN ? 'Change' : 'Set up'}
               <span className="visually-hidden"> {row.label.toLowerCase()}</span>
             </a>
           </li>

@@ -8,6 +8,7 @@ import { downloadBrew } from './brewClient';
 import { AccountActions } from './desk/AccountActions';
 import { formatWhen, MAX_BREW_IDS, minutesOf, plural, relativeDay, scheduleText } from './desk/format';
 import { Pile } from './desk/Pile';
+import type { PileMode } from './desk/Pile';
 import { lookText, SetupRail } from './desk/SetupRail';
 import type { Gmail, SetupMe } from './desk/SetupRail';
 import { errorText } from './layouts';
@@ -23,6 +24,9 @@ type Me = SetupMe & { address: string; token: string; email: string | null; need
 type NextIssue = { ids: string[]; minutes: number; budgetMinutes: number };
 
 const LOAD_ERROR = 'Could not load your desk.';
+
+/** Whether the schedule (and so the desk's mode) is known yet. Accounts without schedules are always 'ready'. */
+type ScheduleState = 'loading' | 'failed' | 'ready';
 
 /** The signed-in home (`/app`): the next issue on top, the reading pile, and the setup rail. */
 export function Library() {
@@ -48,7 +52,15 @@ function Desk({ name }: { name: string }) {
   const [devices, setDevices] = useState<Device[] | null | undefined>(undefined);
   const [nextIssue, setNextIssue] = useState<NextIssue | null | undefined>(undefined);
   const nextIssueRun = useRef(0);
-  const { schedule, loadError: scheduleLoadError, saving: scheduleSaving, error: scheduleError, save: saveSchedule } = useSchedule();
+  const devicesRun = useRef(0);
+  const {
+    schedule,
+    loadError: scheduleLoadError,
+    saving: scheduleSaving,
+    error: scheduleError,
+    save: saveSchedule,
+    reload: reloadSchedule,
+  } = useSchedule();
 
   // By hand every article is ticked unless unticked here, so new arrivals start ticked.
   const [unticked, setUnticked] = useState<ReadonlySet<string>>(new Set());
@@ -65,6 +77,14 @@ function Desk({ name }: { name: string }) {
     const run = ++nextIssueRun.current;
     const body = await load<NextIssue>('/api/me/next-issue');
     if (run === nextIssueRun.current) setNextIssue(body);
+  }, []);
+
+  /** (Re-)reads the paired Mac; the latest call wins. */
+  const loadDevices = useCallback(async () => {
+    const run = ++devicesRun.current;
+    setDevices(undefined);
+    const body = await load<{ devices: Device[] }>('/api/me/print-devices');
+    if (run === devicesRun.current) setDevices(body ? body.devices : null);
   }, []);
 
   useEffect(() => {
@@ -102,21 +122,21 @@ function Desk({ name }: { name: string }) {
     void load<Gmail>('/api/me/gmail').then((body) => {
       if (!cancelled) setGmail(body);
     });
-    void load<{ devices: Device[] }>('/api/me/print-devices').then((body) => {
-      if (!cancelled) setDevices(body ? body.devices : null);
-    });
+    void loadDevices();
     void refreshNextIssue();
     return () => {
       cancelled = true;
     };
-  }, [refreshNextIssue]);
+  }, [loadDevices, refreshNextIssue]);
 
   // Oldest first: the order the server picks in, for a scheduled issue and for a brew of everything.
   const pile = useMemo(
     () => (articles ? [...articles].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)) : []),
     [articles],
   );
-  const scheduled = !!me?.scheduleAvailable && !!schedule?.enabled;
+  // Which mode the desk is in is only known once the schedule has loaded (when this account has one).
+  const scheduleState: ScheduleState = !me?.scheduleAvailable ? 'ready' : scheduleLoadError ? 'failed' : schedule ? 'ready' : 'loading';
+  const mode: PileMode = scheduleState !== 'ready' ? 'unknown' : me?.scheduleAvailable && schedule?.enabled ? 'scheduled' : 'hand';
   const inIssue = useMemo(() => (nextIssue ? new Set(nextIssue.ids) : null), [nextIssue]);
 
   // By hand: the ticked articles, of which the first 50 go in.
@@ -213,48 +233,57 @@ function Desk({ name }: { name: string }) {
   else
     content = (
       <div className="desk-page">
-        <div className="desk-grid">
-          <div className="desk-main">
-            <Hero
-              me={me}
-              scheduled={scheduled}
+        {/* DOM order is the phone order (top card, switch, pile, setup), so focus follows the layout. */}
+        <div className={me.scheduleAvailable ? 'desk-grid' : 'desk-grid no-brewing'}>
+          <Hero
+            me={me}
+            mode={mode}
+            scheduleState={scheduleState}
+            schedule={schedule}
+            nextIssue={nextIssue}
+            devices={devices}
+            pileSize={pile.length}
+            ticked={ticked}
+            going={going}
+            brewing={brewing}
+            brewError={brewError}
+            brewRef={brewRef}
+            titleRef={titleRef}
+            onBrewByHand={brewByHand}
+            onBrewNextIssue={brewNextIssue}
+            onRetrySchedule={() => {
+              // The button goes away with the state it belongs to; the card's heading keeps focus.
+              titleRef.current?.focus();
+              reloadSchedule();
+            }}
+            onRetryDevices={() => {
+              titleRef.current?.focus();
+              void loadDevices();
+            }}
+          />
+          {me.scheduleAvailable && (
+            <BrewingCard
               schedule={schedule}
-              nextIssue={nextIssue}
-              devices={devices}
-              pileSize={pile.length}
-              ticked={ticked}
-              going={going}
-              brewing={brewing}
-              brewError={brewError}
-              brewRef={brewRef}
-              titleRef={titleRef}
-              onBrewByHand={brewByHand}
-              onBrewNextIssue={brewNextIssue}
+              loadError={scheduleLoadError}
+              saving={scheduleSaving}
+              error={scheduleError}
+              onToggle={() => void toggleSchedule()}
             />
-            <Pile
-              articles={pile}
-              scheduled={scheduled}
-              inIssue={inIssue}
-              budgetMinutes={nextIssue?.budgetMinutes ?? schedule?.budgetMinutes ?? null}
-              unticked={unticked}
-              going={goingIds}
-              address={me.address}
-              gmailConnected={!!gmail?.connected}
-              onToggle={toggle}
-              onToggleAll={toggleAll}
-              onRemove={(article) => void remove(article)}
-            />
-          </div>
-          <div className="desk-side">
-            {me.scheduleAvailable && (
-              <BrewingCard
-                schedule={schedule}
-                loadError={scheduleLoadError}
-                saving={scheduleSaving}
-                error={scheduleError}
-                onToggle={() => void toggleSchedule()}
-              />
-            )}
+          )}
+          <Pile
+            articles={pile}
+            mode={mode}
+            inIssue={inIssue}
+            budgetMinutes={nextIssue?.budgetMinutes ?? schedule?.budgetMinutes ?? null}
+            unticked={unticked}
+            going={goingIds}
+            address={me.address}
+            gmailConnected={!!gmail?.connected}
+            onToggle={toggle}
+            onToggleAll={toggleAll}
+            onRemove={(article) => void remove(article)}
+          />
+          <div className="desk-rail">
             <SetupRail me={me} gmail={gmail} schedule={schedule} scheduleFailed={!!scheduleLoadError} devices={devices} />
             {pile.length > 0 && (
               <section className="desk-card desk-save" aria-labelledby="desk-save-title">
@@ -343,12 +372,16 @@ function BrewingCard({
 }
 
 /**
- * The top card. On a schedule with a Mac: when the next issue prints and what it holds, with "Brew now instead".
- * On a schedule without a Mac: paused, waiting for one. By hand: the ticked articles and Brew now.
+ * The top card. Until the schedule has loaded it only says it is checking (a failed load says so, with Try
+ * again), so a scheduled user never sees the by-hand card first. On a schedule with a Mac: when the next issue
+ * prints and what it holds, with "Brew now instead". On a schedule without a Mac: paused, waiting for one; while
+ * the Mac is unknown (loading or failed) it names the time but claims neither. By hand: the ticked articles and
+ * Brew now.
  */
 function Hero({
   me,
-  scheduled,
+  mode,
+  scheduleState,
   schedule,
   nextIssue,
   devices,
@@ -361,9 +394,12 @@ function Hero({
   titleRef,
   onBrewByHand,
   onBrewNextIssue,
+  onRetrySchedule,
+  onRetryDevices,
 }: {
   me: Me;
-  scheduled: boolean;
+  mode: PileMode;
+  scheduleState: ScheduleState;
   schedule: Schedule | null;
   nextIssue: NextIssue | null | undefined;
   devices: Device[] | null | undefined;
@@ -376,6 +412,8 @@ function Hero({
   titleRef: RefObject<HTMLHeadingElement | null>;
   onBrewByHand: () => void;
   onBrewNextIssue: () => void;
+  onRetrySchedule: () => void;
+  onRetryDevices: () => void;
 }) {
   const look = lookText(me);
   const lookLine = (
@@ -388,17 +426,38 @@ function Hero({
   let title: string;
   let body: ReactNode = null;
   let action: ReactNode = null;
-  let warn: ReactNode = null;
+  let notice: ReactNode = null;
+  let busy = false;
+  const scheduled = mode === 'scheduled' && schedule !== null;
 
-  if (scheduled && schedule) {
-    // A failed device check is not shown as "paused": the schedule may well be printing.
-    const paused = devices !== undefined && devices !== null && devices.length === 0;
+  if (scheduleState === 'loading') {
+    busy = true;
+    eyebrow = 'Your next issue';
+    title = 'Checking your schedule…';
+    body = (
+      <div className="desk-skeleton" aria-hidden="true">
+        <i />
+        <i />
+      </div>
+    );
+  } else if (scheduleState === 'failed') {
+    eyebrow = 'Your next issue';
+    title = "Couldn't check your schedule";
+    body = <p className="desk-soft">Your saved articles are still below. Try again to see when your next issue brews.</p>;
+    action = (
+      <button type="button" className="desk-cta" onClick={onRetrySchedule}>
+        Try again
+      </button>
+    );
+  } else if (scheduled) {
     const rel = schedule.nextBrewAt ? relativeDay(schedule.nextBrewAt, schedule.timezone) : null;
     const when = schedule.nextBrewAt ? formatWhen(schedule.nextBrewAt, schedule.timezone) : null;
-    if (paused) {
+    // Only a successful device check may say "Paused" or "Prints …"; until then the card names the time only.
+    const macKnown = devices !== undefined && devices !== null;
+    if (macKnown && devices.length === 0) {
       eyebrow = 'Paused';
       title = 'Waiting for a Mac';
-      warn = (
+      notice = (
         <div className="desk-warn">
           <p>Scheduled issues only brew while a Mac is connected, so nothing will print yet.</p>
           {me.macAppUrl && (
@@ -408,15 +467,24 @@ function Hero({
           )}
         </div>
       );
-    } else if (schedule.brewDue) {
-      eyebrow = 'Printing soon';
-      title = 'Within the hour';
-    } else if (when) {
-      eyebrow = rel ? `Prints ${rel}` : 'Scheduled';
-      title = when;
     } else {
-      eyebrow = 'Scheduled';
-      title = 'Pick a day';
+      if (schedule.brewDue) title = 'Within the hour';
+      else title = when ?? 'Pick a day';
+      if (!macKnown) eyebrow = 'Scheduled';
+      else if (schedule.brewDue) eyebrow = 'Printing soon';
+      else eyebrow = when && rel ? `Prints ${rel}` : 'Scheduled';
+      if (devices === undefined) {
+        busy = true;
+        notice = <p className="desk-soft desk-small">Checking your Mac…</p>;
+      } else if (devices === null)
+        notice = (
+          <div className="desk-warn">
+            <p>Couldn't check your Mac. Scheduled issues only print while one is connected.</p>
+            <button type="button" className="desk-cta" onClick={onRetryDevices}>
+              Try again
+            </button>
+          </div>
+        );
     }
 
     if (nextIssue === undefined) body = <p className="desk-soft">Checking what goes in…</p>;
@@ -470,8 +538,8 @@ function Hero({
           </p>
           {left > 0 && (
             <p className="desk-note">
-              One issue holds up to {MAX_BREW_IDS} articles. The first {MAX_BREW_IDS} you ticked go in;{' '}
-              {plural(left, 'article waits', 'articles wait')} for the next one.
+              One issue holds up to {MAX_BREW_IDS} articles. The oldest {MAX_BREW_IDS} you ticked go in;{' '}
+              {plural(left, 'article is', 'articles are')} left out for the next one.
             </p>
           )}
         </>
@@ -491,13 +559,13 @@ function Hero({
   }
 
   return (
-    <section className="desk-card desk-hero" aria-labelledby="desk-hero-title">
+    <section className="desk-card desk-hero" aria-labelledby="desk-hero-title" aria-busy={busy}>
       <p className="desk-eyebrow">{eyebrow}</p>
       <h1 id="desk-hero-title" ref={titleRef} tabIndex={-1}>
         {title}
       </h1>
       {body}
-      {warn}
+      {notice}
       {(action || scheduled) && (
         <div className="desk-actions">
           {action}
