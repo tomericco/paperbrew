@@ -9,7 +9,7 @@ import { BrewedDialog } from './BrewedDialog';
 import { errorText, LAYOUTS } from './layouts';
 import type { PaperLayout } from './layouts';
 
-type Me = { address: string; token: string; email: string | null; paperLayout: PaperLayout };
+type Me = { address: string; token: string; email: string | null; paperLayout: PaperLayout; needsOnboarding: boolean };
 
 type Tab = 'saved' | 'archived';
 
@@ -71,6 +71,11 @@ function LibraryContent({ name }: { name: string }) {
         const meBody = (await meRes.json()) as Me;
         const articlesBody = (await articlesRes.json()) as { articles: Article[] };
         if (cancelled) return;
+        // A brand-new account starts with the guided setup.
+        if (meBody.needsOnboarding) {
+          location.replace('/app/welcome');
+          return;
+        }
         savedLayoutRef.current = meBody.paperLayout;
         setMe(meBody);
         setArticles(articlesBody.articles);
