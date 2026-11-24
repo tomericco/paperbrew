@@ -4,6 +4,8 @@ import { authClient } from '../../auth';
 import { Layout } from '../../Layout';
 import { SkipContext } from './Card';
 import { DoneCard } from './DoneCard';
+import { GmailCard } from './GmailCard';
+import { LookCard } from './LookCard';
 import { readStoredStep, STEP_ORDER, storeStep } from './steps';
 import type { CardProps, Step } from './steps';
 import { Welcome } from './Welcome';
@@ -14,6 +16,8 @@ import { Welcome } from './Welcome';
  */
 const CARDS: Partial<Record<Step, ComponentType<CardProps>>> = {
   welcome: Welcome,
+  gmail: GmailCard,
+  look: LookCard,
   done: DoneCard,
 };
 
@@ -21,7 +25,7 @@ const registered = (step: Step) => CARDS[step] !== undefined;
 
 function initialStep(): Step {
   // The Google round trip comes back as ?gmail=connected|error and must land on the Gmail card. The query is
-  // left in the URL for that card to read (and strip once it has).
+  // left in the URL for that card to read and strip (so a later reload does not force it again).
   const outcome = new URLSearchParams(location.search).get('gmail');
   if ((outcome === 'connected' || outcome === 'error') && registered('gmail')) return 'gmail';
   const stored = readStoredStep();

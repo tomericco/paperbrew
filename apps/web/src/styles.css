@@ -1547,6 +1547,44 @@ button:disabled {
   }
 }
 
+/* Paper > Style: the same picture cards, the picture being "Aa" in the look's typeface and its accent dot. */
+
+.group-title.paper-group-title {
+  margin: 22px 0 12px;
+}
+
+.paper-looks {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+}
+
+@media (max-width: 600px) {
+  .paper-looks {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.look-aa {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.look-aa i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+@media (max-width: 600px) {
+  .look-aa {
+    font-size: 28px;
+  }
+}
+
 /* Loading: three faint card shapes. */
 
 .skeleton-card {
@@ -2700,9 +2738,320 @@ button:disabled {
   background: var(--ob-ink);
 }
 
+/* Gmail card: connect, or forward to the private address. */
+
+.ob-label {
+  margin-bottom: 8px;
+}
+
+.ob-or {
+  text-align: center;
+}
+
+.ob-cta {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 18px;
+  font-size: 15px;
+}
+
+.ob-connected {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ob-connected .ob-tick {
+  margin-top: 3px;
+}
+
+.ob-email {
+  overflow-wrap: anywhere;
+}
+
+.ob-address-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ob-address-code {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px dashed #cfc8ba;
+  border-radius: 4px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.ob-copy {
+  flex: none;
+  min-height: 44px;
+  padding: 6px 16px;
+  font-size: 14px;
+}
+
+.ob-address > p:empty {
+  display: none;
+}
+
+.ob-address > p {
+  margin-top: 8px;
+}
+
+/* Look card: choice buttons (real buttons with aria-pressed) and the live preview. */
+
+.ob-group-label {
+  margin-bottom: 8px;
+}
+
+.ob-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ob-choices-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ob-choice {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 6px;
+  min-height: 44px;
+  padding: 14px;
+  border-color: var(--ob-line);
+  text-align: left;
+  white-space: normal;
+}
+
+.ob-choice[aria-pressed='true'] {
+  border-color: var(--ob-ink);
+  box-shadow: inset 0 0 0 1px var(--ob-ink);
+}
+
+@media (hover: hover) {
+  .ob-choice:hover:not(:disabled) {
+    background: transparent;
+    color: var(--ob-ink);
+    border-color: var(--ob-ink);
+  }
+}
+
+.ob-choice b {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ob-choice span:not(.ob-aa) {
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 400;
+  color: var(--ob-soft);
+}
+
+.ob-paper-icon {
+  width: 100%;
+  max-width: 120px;
+  height: auto;
+}
+
+.ob-aa {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ob-aa i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+/* The preview: pages are paper, so they keep paper colours. Fonts and accent come from the look. */
+
+.ob-mag {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.6fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.ob-page {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  aspect-ratio: 5 / 7;
+  padding: 12px;
+  overflow: hidden;
+  background: #fffdf8;
+  color: #1a1814;
+  border: 1px solid #d9d5cb;
+  box-shadow: 0 6px 18px rgba(17, 17, 17, 0.14);
+  font-family: var(--ob-b);
+}
+
+.ob-cover {
+  justify-content: space-between;
+}
+
+.ob-bar {
+  height: 6px;
+  background: var(--ob-a);
+}
+
+.ob-meta {
+  font-size: 7px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+.ob-cover .ob-bar + .ob-meta {
+  margin-top: 6px;
+}
+
+.ob-cover-title {
+  font-family: var(--ob-d);
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+/* Monospace is wide: the zine cover title is set smaller so the cover still fits. */
+.ob-mag[data-look='zine'] .ob-cover-title {
+  font-size: 17px;
+}
+
+.ob-cover ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 8.5px;
+  line-height: 1.25;
+}
+
+.ob-cover li {
+  padding-top: 4px;
+  border-top: 1px solid rgba(0, 0, 0, 0.18);
+}
+
+.ob-spread {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  box-shadow: 0 6px 18px rgba(17, 17, 17, 0.14);
+}
+
+.ob-spread.is-single {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 50%;
+}
+
+.ob-spread .ob-page {
+  box-shadow: none;
+}
+
+.ob-spread .ob-page:first-child:not(:last-child) {
+  border-right-color: #bdb8ac;
+}
+
+.ob-kick {
+  font-size: 6.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ob-a);
+}
+
+.ob-page h4 {
+  margin: 0;
+  font-family: var(--ob-d);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.ob-tx {
+  font-size: 6.6px;
+  line-height: 1.4;
+}
+
+.ob-quote {
+  padding-left: 6px;
+  border-left: 2px solid var(--ob-a);
+  font-family: var(--ob-d);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
 @media (max-width: 520px) {
   .ob-card {
     padding: 24px 20px;
+  }
+
+  .ob-choices-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* One look per row on a phone: the sample on the left, its name and note on the right. */
+  .ob-choices-3 .ob-choice {
+    display: grid;
+    grid-template-columns: 76px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: 14px;
+    row-gap: 2px;
+    align-items: center;
+  }
+
+  .ob-choices-3 .ob-aa {
+    grid-row: 1 / span 2;
+  }
+
+  .ob-mag {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ob-mag .ob-cover {
+    max-width: 190px;
+  }
+
+  .ob-spread .ob-page {
+    aspect-ratio: auto;
+    min-height: 210px;
+  }
+
+  .ob-spread.is-single {
+    max-width: 190px;
+  }
+
+  .ob-spread.is-single .ob-page {
+    aspect-ratio: 5 / 7;
+    min-height: 0;
+  }
+
+  .ob-cover-title {
+    font-size: 20px;
+  }
+
+  .ob-mag[data-look='zine'] .ob-cover-title {
+    font-size: 15px;
+  }
+
+  .ob-tx {
+    font-size: 6px;
   }
 }
 

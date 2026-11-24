@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { PAPER_LOOKS } from '../looks';
+import { load } from './api';
 import { Card } from './Card';
 import { clearStoredStep } from './steps';
 
@@ -9,27 +11,12 @@ type Devices = { devices: { name: string }[] };
 
 type Loaded = { me: Me | null; gmail: Gmail | null; schedule: Schedule | null; devices: Devices | null };
 
-// The looks' display names. Mirrors the API's paper looks until looks.ts exists to share.
-const LOOK_NAMES: Record<string, string> = { broadsheet: 'Broadsheet', fieldnotes: 'Field Notes', zine: 'Zine' };
+const lookName = (value: string) => PAPER_LOOKS.find((l) => l.value === value)?.label ?? value;
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONDAY_FIRST = [1, 2, 3, 4, 5, 6, 0];
 
 const hourLabel = (h: number) => `${h % 12 || 12}:00 ${h < 12 ? 'am' : 'pm'}`;
-
-/** A failed or unavailable request is null: the row then says so, and Done still works. */
-async function load<T>(path: string): Promise<T | null> {
-  try {
-    const res = await fetch(path);
-    if (res.status === 401) {
-      location.replace('/signin');
-      return null;
-    }
-    return res.ok ? ((await res.json()) as T) : null;
-  } catch {
-    return null;
-  }
-}
 
 function formatNext(iso: string, timeZone: string): string | null {
   const date = new Date(iso);
@@ -76,7 +63,7 @@ function summarize(d: Loaded): { rows: Row[]; tail: string } {
 
   rows.push({
     label: 'Look',
-    text: d.me ? `${LOOK_NAMES[d.me.paperLook] ?? d.me.paperLook}, ${d.me.paperLayout === 'booklet' ? 'booklet' : 'flat A4'}` : unknown,
+    text: d.me ? `${lookName(d.me.paperLook)}, ${d.me.paperLayout === 'booklet' ? 'booklet' : 'flat A4'}` : unknown,
     done: d.me !== null,
   });
 
