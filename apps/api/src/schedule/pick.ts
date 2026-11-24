@@ -8,7 +8,7 @@ export const MAX_ISSUE_ARTICLES = 50;
 export const ROLLOVER_LIMIT = 2;
 
 /** Null reading time counts as one minute. */
-const DEFAULT_MINUTES = 1;
+export const DEFAULT_MINUTES = 1;
 
 /**
  * Picks articles in order until the next one would exceed the budget or the cap. The first article is

@@ -11,7 +11,7 @@ import { gmailAvailable } from '../gmail/available.js';
 import { senderEmail } from '../gmail/rules.js';
 import { formatAddress, normalizeToken } from '../inbound/address.js';
 import { CANDIDATES_SQL } from '../schedule/createIssue.js';
-import { planIssue } from '../schedule/pick.js';
+import { DEFAULT_MINUTES, planIssue } from '../schedule/pick.js';
 import { isBrewDue, nextBrewAt } from '../schedule/schedule.js';
 import { UUID_RE } from '../uuid.js';
 
@@ -66,6 +66,7 @@ library.get('/me', async (c) => {
   }>(
     `select a.token, u.email, u.paper_layout, u.paper_look, u.brew_enabled,
             u.onboarded_at is not null as onboarded,
+            -- Archived and not-ready articles count on purpose: an existing user must never be sent to onboarding.
             exists (select 1 from articles where user_id = u.id) as has_articles,
             exists (select 1 from gmail_connections where user_id = u.id) as has_gmail,
             exists (select 1 from print_devices where user_id = u.id and revoked_at is null) as has_device
@@ -258,8 +259,8 @@ library.get('/me/next-issue', async (c) => {
     budgetMinutes,
   );
   const byId = new Map(rows.map((r) => [r.id, r.reading_minutes]));
-  // A null reading time counts as one minute, as in planIssue.
-  const minutes = picked.reduce((sum, id) => sum + (byId.get(id) ?? 1), 0);
+  // A null reading time counts as DEFAULT_MINUTES, as in planIssue.
+  const minutes = picked.reduce((sum, id) => sum + (byId.get(id) ?? DEFAULT_MINUTES), 0);
   return c.json({ ids: picked, minutes, budgetMinutes });
 });
 

@@ -319,6 +319,7 @@ describe('looks', () => {
     expect(fontsLink(h)).not.toContain('DM+Sans');
     expect(fontsLink(h)).toContain('display=block');
     expect(lookCss('zine')).not.toMatch(/body\s*\{[^}]*font-family/); // the body keeps Source Serif 4
+    expect(lookCss('zine')).toMatch(/\.headline, \.cover-title \.t \{ overflow-wrap: anywhere; \}/);
   });
 
   it.each(['fieldnotes', 'zine'] as const)('%s keeps the Hebrew and Arabic fallbacks in every font stack', (look) => {

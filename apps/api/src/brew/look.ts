@@ -46,6 +46,8 @@ body, .masthead, .headline, .cover-title .t, .byline, .body h2, .body h3, .body 
       return `
 /* Look: zine. Space Mono headings over the Source Serif 4 body, blue accent. */
 .masthead, .headline, .cover-title .t, .body h2, .body h3, .body h4, .body h5, .body h6 { font-family: ${mono}; }
+/* Monospace is wide: a long unbroken word in a title must wrap instead of running off the page. */
+.headline, .cover-title .t { overflow-wrap: anywhere; }
 .cover .rule.thick { border-top-color: #1d4ed8; }
 .kicker { color: #1d4ed8; }
 .body blockquote { border-inline-start-color: #1d4ed8; }

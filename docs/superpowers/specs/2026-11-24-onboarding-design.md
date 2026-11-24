@@ -29,7 +29,7 @@ Dots read "Step n of 5" on cards 2 to 6 below.
 ## The desk (`/app`)
 - Top card: scheduled and a Mac paired: "Prints in N days / Sunday at 8:00 am", the issue's articles and minutes, "Brew now instead". Scheduled without a Mac: "Paused / Waiting for a Mac" with Connect a Mac. By hand: "Ready when you are" with Brew now; empty pile says so.
 - A switch "On a schedule / By hand" toggles `brew_enabled`.
-- Reading pile: by hand, tick the articles for the next issue; on a schedule, rows show "In issue / Next time" (the server's pick rule, newest first within the budget). The empty state shows the forwarding address.
+- Reading pile: by hand, tick the articles for the next issue; on a schedule, rows show "In issue / Next time" (the server's pick rule: oldest first, picked until the budget is full). The empty state shows the forwarding address.
 - Side rail: setup status for Newsletters, Schedule, Printer, Look, each linking to Settings.
 - Nav: Desk, Issues, Settings (the existing pages stay; Library's archive view moves under Issues only if cheap, otherwise stays reachable).
 - First run: `/app` redirects to `/app/welcome` while `needsOnboarding`.

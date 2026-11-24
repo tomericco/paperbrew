@@ -27,6 +27,7 @@
 3. **Nothing found, or no Gmail.** The first-issue card shows the forwarding address, Check again, and Skip; Check again re-reads `/api/articles` and offers Brew once an article exists (Task 3).
 4. **Existing user opens `/app/welcome` directly.** It works; Done calls `POST /me/onboarding/complete`; `/app` is never redirected for them (Task 1).
 5. **By-hand brew of a selection that changes mid-flight.** Brewing with `ids` of articles archived meanwhile brews fewer, shows what went in from `x-brew-article-ids`, and archives exactly those (Task 5).
+6. **More than 50 articles in the pile.** The by-hand brew never sends more than 50 `ids` (the API answers 400), says how many were left out, and a fully ticked pile of at most 50 sends no `ids` (Task 5).
 
 ---
 
@@ -121,6 +122,7 @@
   - A real switch "On a schedule / By hand" calling `PUT /api/me/settings { brewEnabled }` (turning on with no days set sends `brewDays: [0]`, Sunday, so the schedule is valid).
   - Pile: by hand, a checkbox per article (default: all selected) and "Brew now" brews `downloadBrew(selectedIds)`, then the existing archive dialog for exactly the ids that went in; on a schedule, rows show "In issue" for ids in `/api/me/next-issue` and "Next time" otherwise, oldest first. Remove per article keeps the existing behavior. Empty state shows the forwarding address with Copy.
   - Side rail: Newsletters, Schedule, Printer, Look rows with a status and a Change link into the matching Settings section.
+  - `GET /api/brew?ids=` accepts at most 50 ids (400 above that), so the by-hand "Brew now" caps the selection at 50 and shows how many were left out, or sends no `ids` when everything is ticked and the pile has at most 50.
 - [ ] **Step 2: Verify.** `npm run typecheck`; mock API for: by hand empty and filled, scheduled with and without a Mac, brew with a selection, archive dialog, switch toggling; the existing Library behaviors you touched still work (archive list, remove, brew error). 1280 and 375 px, no sideways scroll, targets at least 40px.
 - [ ] **Step 3: Commit** `feat(web): the desk for manual and scheduled brewing`.
 

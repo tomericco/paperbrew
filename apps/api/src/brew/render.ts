@@ -5,7 +5,7 @@
 // The design's Contents page is left out.
 
 import type { PaperLayout } from './layout.js';
-import { lookCss, lookFontFamilies, type PaperLook } from './look.js';
+import { DEFAULT_LOOK, lookCss, lookFontFamilies, type PaperLook } from './look.js';
 import { detectScript, directionOf, issueDirection, type Direction, type Script } from './direction.js';
 
 export type BrewArticle = {
@@ -301,7 +301,7 @@ export function renderMagazine(input: {
   const pieces = toPieces(input.articles);
   // Footer titles stop well short of the page number: about 60 characters fit the A4 text width, 42 the A5.
   const footers = pieces.map((p, i) => footerRule(p, i, booklet ? 42 : 60)).join('\n');
-  const look = input.look ?? 'broadsheet';
+  const look = input.look ?? DEFAULT_LOOK;
   const css = (booklet ? BOOKLET_PAGE + CSS + BOOKLET_CSS : FLAT_PAGE + CSS) + lookCss(look) + footers;
   const title = `Paperbrew · ${formatIssueDate(input.date)}`;
   return `<!doctype html>

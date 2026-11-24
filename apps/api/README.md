@@ -154,6 +154,16 @@ The Mac app (a local agent) prints queued issues. It talks to these routes; ever
 - **States:** `queued` → `printing` (claimed) → `printed` or `failed`. `ok: true` marks the issue printed and archives its articles; `ok: false` marks it failed with `error` (cut to 500 characters). A failed issue can be printed again from Settings.
 - **Timeout:** an issue `printing` for over 30 minutes is failed with `error = 'timed out'` by the stale sweep in `/cron/tick`, so the Mac must report within 30 minutes of claiming. A success reported late for a `timed out` issue still counts (`ok: true` makes it `printed` and archives its articles); a late `ok: false` is a `404`.
 
+## Library API (signed-in user)
+
+Beyond the basics (`/me/address`, `/me/schedule`, `/articles`), these were added with onboarding:
+
+- `PUT /me/settings` accepts `paperLook`: `broadsheet` (default), `fieldnotes` or `zine`, stored in `users.paper_look`. The renderer applies it to `GET /brew` and to the print agent's PDF. `GET /me` returns it as `paperLook`.
+- `GET /me` also returns `needsOnboarding`. It is computed, never stored: `users.onboarded_at` is null **and** the user has no articles (archived and not-ready ones count), no Gmail connection, no active print device and brew is not enabled. `POST /me/onboarding/complete` sets `onboarded_at` (idempotent, `204`).
+- `GET /brew?ids=a,b,c` brews only those articles: at most 50 UUIDs, taken from the caller's ready, unarchived articles, oldest first (`created_at` ascending). `400` on a bad list. Without `ids` it brews every saved article, as before.
+- `GET /me/next-issue` previews what the next scheduled issue holds: `{ ids, minutes, budgetMinutes }`. Read-only (no rollover, no writes), same pick rule as `create_issue` (oldest first, picked until the reading-time budget is full), and it works whether or not the schedule is on.
+- `GET /articles` rows carry `readingMinutes` (null when unknown; counts as 1 minute when picking).
+
 ## Security notes
 
 - **Addresses are secret.** Tokens are three random words, so anyone who knows an address can add to that library. Set `REQUIRE_KNOWN_SENDER=true` to accept only the account email and verified aliases (`sender_aliases`). To rotate an address, set `disabled_at` and issue a new token.

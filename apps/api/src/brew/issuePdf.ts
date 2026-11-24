@@ -1,7 +1,7 @@
 import { htmlToPdf } from './pdf.js';
 import { imposeBooklet } from './booklet.js';
 import type { PaperLayout } from './layout.js';
-import type { PaperLook } from './look.js';
+import { DEFAULT_LOOK, type PaperLook } from './look.js';
 import { magazineDirection, renderMagazine, type BrewArticle } from './render.js';
 
 /**
@@ -13,7 +13,7 @@ export async function renderIssuePdf(
   articles: BrewArticle[],
   layout: PaperLayout,
   date: Date,
-  look: PaperLook = 'broadsheet',
+  look: PaperLook = DEFAULT_LOOK,
 ): Promise<ReadableStream<Uint8Array>> {
   let pdf = await htmlToPdf(renderMagazine({ date, articles, layout, look }));
   if (layout === 'booklet') {

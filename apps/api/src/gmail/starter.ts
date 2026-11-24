@@ -29,11 +29,12 @@ export async function fetchStarterArticles(userId: string, deps: Deps = {}): Pro
   const result = () => ({ scanned: stats.seen, saved: stats.saved });
   if (!conn || conn.starter_done_at) return result();
   if (!config.GMAIL_TOKEN_KEY) throw new Error('GMAIL_TOKEN_KEY is not set, so Gmail cannot be synced');
-  const refreshToken = decryptToken(conn.refresh_token_enc, config.GMAIL_TOKEN_KEY);
   const gmail = deps.gmail ?? realGmail;
   const lastAttempt = deps.lastAttempt ?? false;
 
   try {
+    // Inside the try so a token that cannot be decrypted still marks the starter done on the last attempt.
+    const refreshToken = decryptToken(conn.refresh_token_enc, config.GMAIL_TOKEN_KEY);
     const token = await gmail.refreshAccessToken(refreshToken);
     const ids = await unseenIds(userId, await gmail.listMessages(token, STARTER_QUERY, STARTER_MAX_SCAN));
     const blocked = await blockedSenders(userId);

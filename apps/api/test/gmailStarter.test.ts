@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GmailAuthError } from '../src/gmail/client.js';
 import { encryptToken } from '../src/gmail/crypto.js';
 import { paragraphs } from './helpers.js';
@@ -61,6 +61,10 @@ const articleInserts = () => clientQuery.mock.calls.filter((c) => /insert into a
 
 let seenIds: string[];
 let connection: { refresh_token_enc: string; starter_done_at: Date | null } | undefined;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 beforeEach(() => {
   for (const m of [poolQuery, clientQuery, release, extractNewsletter]) m.mockClear();
@@ -200,6 +204,20 @@ describe('fetchStarterArticles', () => {
     });
     await expect(fetchStarterArticles('user-1', { gmail, lastAttempt: true })).rejects.toThrow('returned 500');
     expect(doneUpdates()).toHaveLength(1);
+  });
+
+  it('on the last attempt, a token that cannot be decrypted still records starter_done_at before throwing', async () => {
+    connection!.refresh_token_enc = 'not-a-valid-token';
+    const gmail = fakeGmail([]);
+    await expect(fetchStarterArticles('user-1', { gmail, lastAttempt: true })).rejects.toThrow();
+    expect(gmail.refreshAccessToken).not.toHaveBeenCalled();
+    expect(doneUpdates()).toHaveLength(1);
+  });
+
+  it('on an earlier attempt, a token that cannot be decrypted throws without recording starter_done_at', async () => {
+    connection!.refresh_token_enc = 'not-a-valid-token';
+    await expect(fetchStarterArticles('user-1', { gmail: fakeGmail([]) })).rejects.toThrow();
+    expect(doneUpdates()).toHaveLength(0);
   });
 
   it('on the last attempt, skips a message that keeps failing and carries on', async () => {
