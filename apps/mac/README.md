@@ -38,7 +38,9 @@ apps/mac/release/Paperbrew-<version>-universal.dmg
 
 `release/` and `dist/` are not committed. `npm run dist` deletes `dist/` first, so a module removed from `src/` can't
 ship from an old build. Settings live in `electron-builder.yml`; the app icon is
-`assets/icon.icns` (regenerate with `node apps/mac/scripts/make-app-icon.js`, macOS only).
+`assets/icon.icns`, with the menu-bar `assets/IconTemplate*.png`, both drawn from the Paperbrew logo geometry.
+Regenerate them with `npm i --no-save sharp && node apps/mac/scripts/make-icons.js` (macOS only; sharp is not a
+repo dependency).
 
 The app is **not signed with a Developer ID or notarized yet**, so macOS warns the first time. Whoever installs it
 drags Paperbrew to Applications and opens it once like this:
@@ -70,7 +72,7 @@ anything odd.
 
 1. **Install.** Open the .dmg, drag Paperbrew to Applications, then open it as described under "Building the .dmg"
    (macOS 15 and later: dismiss the warning, then System Settings > Privacy & Security > **Open Anyway**; macOS 14
-   and older: right-click > Open). A small paper icon appears in the menu bar and there is no Dock icon. The first
+   and older: right-click > Open). A small espresso-machine icon appears in the menu bar and there is no Dock icon. The first
    time, macOS may ask to use the Keychain item "Paperbrew Safe Storage" (an ad-hoc signed build can trigger this):
    click **Always Allow**. If you deny it, the app can't keep its sign-in and you have to connect again.
 2. **Connect this Mac.** In Paperbrew Settings click **Connect this Mac**. The browser asks to open Paperbrew; allow
