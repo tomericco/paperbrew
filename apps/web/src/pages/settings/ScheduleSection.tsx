@@ -1,38 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { errorText } from '../layouts';
+import { useMemo } from 'react';
+import { browserTimeZone, DAYS, useSchedule } from '../useSchedule';
 import { SettingsCard, useReportStatus } from './SettingsCard';
 import type { SectionStatus } from './SettingsCard';
-
-type Schedule = {
-  enabled: boolean;
-  days: number[];
-  hour: number;
-  timezone: string;
-  budgetMinutes: number;
-  nextBrewAt: string | null;
-  /** An open slot the next hourly tick will brew for. */
-  brewDue: boolean;
-};
-
-/** The fields a change can touch, named as the settings API names them. */
-type Patch = Partial<{
-  brewEnabled: boolean;
-  brewDays: number[];
-  brewHour: number;
-  brewTimezone: string;
-  brewBudgetMinutes: number;
-}>;
-
-// 0 = Sunday ... 6 = Saturday; the chips read Monday first.
-const DAYS = [
-  { value: 1, short: 'Mon', long: 'Monday' },
-  { value: 2, short: 'Tue', long: 'Tuesday' },
-  { value: 3, short: 'Wed', long: 'Wednesday' },
-  { value: 4, short: 'Thu', long: 'Thursday' },
-  { value: 5, short: 'Fri', long: 'Friday' },
-  { value: 6, short: 'Sat', long: 'Saturday' },
-  { value: 0, short: 'Sun', long: 'Sunday' },
-];
 
 const BUDGETS = [
   { value: 30, hint: 'A quick read.' },
@@ -46,17 +15,7 @@ const EVERY_DAY = [1, 2, 3, 4, 5, 6, 0];
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 
-const SAVE_ERROR = 'Could not save your schedule.';
-
 const pad = (n: number) => String(n).padStart(2, '0');
-
-function browserTimeZone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone;
-  } catch {
-    return 'UTC';
-  }
-}
 
 function timeZones(current: string): string[] {
   let zones: string[] = [];
@@ -91,79 +50,9 @@ function nowIn(timeZone: string): string | null {
 }
 
 export function ScheduleSection({ step, onStatus }: { step?: number; onStatus?: (s: SectionStatus) => void }) {
-  const [schedule, setSchedule] = useState<Schedule | null>(null);
-  const [loadError, setLoadError] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  async function fetchSchedule(): Promise<Schedule | null> {
-    const res = await fetch('/api/me/schedule');
-    if (res.status === 401) {
-      location.replace('/signin');
-      return null;
-    }
-    if (!res.ok) throw new Error();
-    return (await res.json()) as Schedule;
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchSchedule()
-      .then((body) => {
-        if (body && !cancelled) setSchedule(body);
-      })
-      .catch(() => {
-        if (!cancelled) setLoadError('Could not load your schedule.');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { schedule, loadError, saving, error, save } = useSchedule();
 
   const zones = useMemo(() => timeZones(schedule?.timezone ?? 'UTC'), [schedule?.timezone]);
-
-  async function save(patch: Patch) {
-    if (!schedule || saving) return;
-    const previous = schedule;
-    // Turning on while the zone is still the UTC default: take the browser's zone instead.
-    const browser = browserTimeZone();
-    if (patch.brewEnabled && schedule.timezone === 'UTC' && browser !== 'UTC') patch = { ...patch, brewTimezone: browser };
-
-    setSchedule({
-      ...schedule,
-      ...(patch.brewEnabled !== undefined && { enabled: patch.brewEnabled }),
-      ...(patch.brewDays !== undefined && { days: patch.brewDays }),
-      ...(patch.brewHour !== undefined && { hour: patch.brewHour }),
-      ...(patch.brewTimezone !== undefined && { timezone: patch.brewTimezone }),
-      ...(patch.brewBudgetMinutes !== undefined && { budgetMinutes: patch.brewBudgetMinutes }),
-    });
-    setSaving(true);
-    setError('');
-    try {
-      const res = await fetch('/api/me/settings', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(patch),
-      });
-      if (!res.ok) {
-        setSchedule(previous);
-        setError(await errorText(res, SAVE_ERROR));
-        return;
-      }
-      // The saved change is in; the next issue time comes from the server.
-      try {
-        const fresh = await fetchSchedule();
-        if (fresh) setSchedule(fresh);
-      } catch {
-        setError('Saved, but could not refresh the next issue time. Reload to see it.');
-      }
-    } catch {
-      setSchedule(previous);
-      setError(SAVE_ERROR);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   function toggleDay(day: number) {
     if (!schedule) return;

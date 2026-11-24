@@ -2,15 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent, ReactNode } from 'react';
 import { authClient } from '../auth';
 import { Layout } from '../Layout';
+import { AccountActions } from './desk/AccountActions';
 import { errorText, LAYOUTS } from './layouts';
 import type { PaperLayout } from './layouts';
+import { LOOK_FONTS, PAPER_LOOKS, toPaperLook } from './looks';
+import type { PaperLook } from './looks';
 import { GmailSection } from './settings/GmailSection';
 import { PrinterSection } from './settings/PrinterSection';
 import { ScheduleSection } from './settings/ScheduleSection';
 import { SettingsCard, useReportStatus } from './settings/SettingsCard';
 import type { SectionStatus } from './settings/SettingsCard';
 
-type Me = { paperLayout: PaperLayout; gmailAvailable: boolean; scheduleAvailable: boolean; macAppUrl: string | null };
+type Me = { paperLayout: PaperLayout; paperLook: string; gmailAvailable: boolean; scheduleAvailable: boolean; macAppUrl: string | null };
 
 const NOTICES: Record<string, string> = {
   connected: 'Gmail connected. New newsletters will appear within the hour.',
@@ -122,27 +125,10 @@ function SettingsContent({ name }: { name: string }) {
     [activate],
   );
 
-  async function signOut() {
-    await authClient.signOut();
-    location.assign('/');
-  }
-
-  const header = (
-    <>
-      <a className="btn" href="/app">
-        Library
-      </a>
-      <span className="who">{name}</span>
-      <button type="button" onClick={signOut}>
-        Sign out
-      </button>
-    </>
-  );
-
   const progress = steps.length >= 2 ? <Progress steps={steps} statuses={statuses} /> : null;
 
   return (
-    <Layout actions={header}>
+    <Layout nav="settings" actions={<AccountActions name={name} />}>
       <div className="grid">
         <div className="span-12 settings">
           <header className="settings-head" style={{ '--i': 0 } as CSSProperties}>
@@ -167,7 +153,7 @@ function SettingsContent({ name }: { name: string }) {
                   {me.gmailAvailable && <GmailSection step={stepOf(sections, 'gmail')} onStatus={report.gmail} />}
                   {me.scheduleAvailable && <ScheduleSection step={stepOf(sections, 'schedule')} onStatus={report.schedule} />}
                   {me.macAppUrl && <PrinterSection macAppUrl={me.macAppUrl} step={stepOf(sections, 'printer')} onStatus={report.printer} />}
-                  <PaperSection initial={me.paperLayout} onStatus={report.paper} />
+                  <PaperSection initial={me.paperLayout} initialLook={toPaperLook(me.paperLook)} onStatus={report.paper} />
                 </div>
               </div>
             </>
@@ -465,8 +451,17 @@ function PaperArt({ layout }: { layout: PaperLayout }) {
   );
 }
 
-function PaperSection({ initial, onStatus }: { initial: PaperLayout; onStatus?: (s: SectionStatus) => void }) {
+function PaperSection({
+  initial,
+  initialLook,
+  onStatus,
+}: {
+  initial: PaperLayout;
+  initialLook: PaperLook;
+  onStatus?: (s: SectionStatus) => void;
+}) {
   const [layout, setLayout] = useState(initial);
+  const [look, setLook] = useState(initialLook);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState<'shown' | 'fading' | null>(null);
@@ -482,28 +477,40 @@ function PaperSection({ initial, onStatus }: { initial: PaperLayout; onStatus?: 
     timers.current = [window.setTimeout(() => setSaved('fading'), 1700), window.setTimeout(() => setSaved(null), 2100)];
   }
 
-  async function choose(next: PaperLayout) {
-    if (next === layout || saving) return;
-    const previous = layout;
-    setLayout(next);
+  /** Saves one setting, optimistically; on failure it goes back to `previous` and says so. */
+  async function save(body: { paperLayout: PaperLayout } | { paperLook: PaperLook }, revert: () => void, failure: string) {
     setSaving(true);
     setError('');
     try {
       const res = await fetch('/api/me/settings', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ paperLayout: next }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
-        setLayout(previous);
-        setError(await errorText(res, 'Could not save your paper layout.'));
+        revert();
+        setError(await errorText(res, failure));
       } else flashSaved();
     } catch {
-      setLayout(previous);
-      setError('Could not save your paper layout.');
+      revert();
+      setError(failure);
     } finally {
       setSaving(false);
     }
+  }
+
+  function choose(next: PaperLayout) {
+    if (next === layout || saving) return;
+    const previous = layout;
+    setLayout(next);
+    void save({ paperLayout: next }, () => setLayout(previous), 'Could not save your paper layout.');
+  }
+
+  function chooseLook(next: PaperLook) {
+    if (next === look || saving) return;
+    const previous = look;
+    setLook(next);
+    void save({ paperLook: next }, () => setLook(previous), 'Could not save your look.');
   }
 
   const savedNote = (
@@ -520,7 +527,7 @@ function PaperSection({ initial, onStatus }: { initial: PaperLayout; onStatus?: 
   );
 
   return (
-    <SettingsCard id="paper" title="Paper" description="How your pages are laid out." aside={savedNote}>
+    <SettingsCard id="paper" title="Paper" description="How your pages are laid out, and how they look." aside={savedNote}>
       {/* The radios stay enabled while saving (choose() ignores clicks then): disabling them would drop keyboard focus. */}
       <fieldset className="paper-choices" aria-busy={saving}>
         <legend className="visually-hidden">Paper layout</legend>
@@ -532,7 +539,7 @@ function PaperSection({ initial, onStatus }: { initial: PaperLayout; onStatus?: 
               name="paper-layout"
               value={option.value}
               checked={layout === option.value}
-              onChange={() => void choose(option.value)}
+              onChange={() => choose(option.value)}
             />
             <span className="paper-art">
               <PaperArt layout={option.value} />
@@ -540,6 +547,36 @@ function PaperSection({ initial, onStatus }: { initial: PaperLayout; onStatus?: 
             <span className="paper-text">
               <span className="paper-label">{option.label}</span>
               <span className="paper-hint">{option.hint}</span>
+            </span>
+            <span className="paper-check" aria-hidden="true">
+              <svg width="12" height="12" viewBox="0 0 12 12">
+                <path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      <h3 className="group-title paper-group-title">Style</h3>
+      <fieldset className="paper-choices paper-looks" aria-busy={saving}>
+        <legend className="visually-hidden">Magazine style</legend>
+        {PAPER_LOOKS.map((option) => (
+          <label key={option.value} className="paper-choice">
+            <input
+              className="paper-radio"
+              type="radio"
+              name="paper-look"
+              value={option.value}
+              checked={look === option.value}
+              onChange={() => chooseLook(option.value)}
+            />
+            <span className="paper-art">
+              <span className="look-aa" style={{ fontFamily: LOOK_FONTS[option.value].display }} aria-hidden="true">
+                Aa<i style={{ background: option.accent }} />
+              </span>
+            </span>
+            <span className="paper-text">
+              <span className="paper-label">{option.label}</span>
+              <span className="paper-hint">{option.note}</span>
             </span>
             <span className="paper-check" aria-hidden="true">
               <svg width="12" height="12" viewBox="0 0 12 12">

@@ -160,7 +160,7 @@ Beyond the basics (`/me/address`, `/me/schedule`, `/articles`), these were added
 
 - `PUT /me/settings` accepts `paperLook`: `broadsheet` (default), `fieldnotes` or `zine`, stored in `users.paper_look`. The renderer applies it to `GET /brew` and to the print agent's PDF. `GET /me` returns it as `paperLook`.
 - `GET /me` also returns `needsOnboarding`. It is computed, never stored: `users.onboarded_at` is null **and** the user has no articles (archived and not-ready ones count), no Gmail connection, no active print device and brew is not enabled. `POST /me/onboarding/complete` sets `onboarded_at` (idempotent, `204`).
-- `GET /brew?ids=a,b,c` brews only those articles: at most 50 UUIDs, taken from the caller's ready, unarchived articles, oldest first (`created_at` ascending). `400` on a bad list. Without `ids` it brews every saved article, as before.
+- `GET /brew?ids=a,b,c` brews only those articles: at most 50 UUIDs, taken from the caller's ready, unarchived articles, oldest first (`created_at` ascending). `400` on a bad list. Without `ids` it brews at most the 50 oldest ready, unarchived articles. Either way the `x-brew-article-ids` response header lists the ids that went into the PDF, in brew order.
 - `GET /me/next-issue` previews what the next scheduled issue holds: `{ ids, minutes, budgetMinutes }`. Read-only (no rollover, no writes), same pick rule as `create_issue` (oldest first, picked until the reading-time budget is full), and it works whether or not the schedule is on.
 - `GET /articles` rows carry `readingMinutes` (null when unknown; counts as 1 minute when picking).
 
